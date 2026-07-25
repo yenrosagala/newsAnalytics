@@ -21,3 +21,4 @@ seaborn
 lxml
 supabase
 scikit-learn
+cloudscraper
