@@ -17,8 +17,6 @@ logger = setup_logger("page_scraping")
 st.set_page_config(page_title="FlashNews: News Scraper", layout="wide", page_icon="📰")
 
 # --- PROTEKSI HALAMAN ---
-# Memakai session_state yang sama dengan Homepage, jadi begitu login di
-# Homepage, halaman ini tidak akan minta login lagi (selama tab tidak ditutup/refresh).
 require_login()
 
 try:

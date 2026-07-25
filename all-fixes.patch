@@ -32,8 +32,42 @@ index 1e60699..13f1533 100644
  def render_login_form():
      """Merender form login di sidebar atau halaman utama."""
      st.sidebar.subheader("🔒 Masuk ke Sistem")
+diff --git a/app/services/database_service.py b/app/services/database_service.py
+index 1649e63..827c4b6 100644
+--- a/app/services/database_service.py
++++ b/app/services/database_service.py
+@@ -13,7 +13,13 @@ class DatabaseService:
+ 
+     def __init__(self):
+         self.supabase_url = st.secrets.get("SUPABASE_URL", "https://qbqvtdhaktjbohyfwkvi.supabase.co")
+-        self.default_api_key = st.secrets.get("SUPABASE_PUBLISHABLE_KEY", "")
++        # Supabase menamai ulang "anon key" menjadi "Publishable key" di sistem API key
++        # baru mereka. Kita cek beberapa kemungkinan nama secret agar tidak gampang salah ketik.
++        self.default_api_key = (
++            st.secrets.get("SUPABASE_PUBLISHABLE_KEY", "")
++            or st.secrets.get("SUPABASE_ANON_KEY", "")
++            or st.secrets.get("SUPABASE_KEY", "")
++        )
+ 
+     def _get_client(self, custom_api_key: str = None) -> Client:
+         """Helper untuk membuat client dengan opsional API Key (untuk admin)."""
+diff --git a/app/services/scraper_service.py b/app/services/scraper_service.py
+index 3342d57..5210f5e 100644
+--- a/app/services/scraper_service.py
++++ b/app/services/scraper_service.py
+@@ -188,8 +188,8 @@ class ScraperService:
+         if progress_bar:
+             progress_bar.progress(1.0)
+         return saved_count
+-        
+-def _extract_article_metadata(self, url: str, fallback_title: str = "", fallback_desc: str = "") -> dict:
++
++    def _extract_article_metadata(self, url: str, fallback_title: str = "", fallback_desc: str = "") -> dict:
+         """
+         Mengambil metadata lengkap artikel menggunakan newspaper4k:
+         - Nama media dari domain URL
 diff --git a/pages/1_Scraping.py b/pages/1_Scraping.py
-index 49eb6cf..24ecb4d 100644
+index 49eb6cf..35e239f 100644
 --- a/pages/1_Scraping.py
 +++ b/pages/1_Scraping.py
 @@ -8,6 +8,7 @@ from app.core.config import Config
@@ -44,15 +78,13 @@ index 49eb6cf..24ecb4d 100644
  
  # Inisialisasi konfigurasi
  config = Config()
-@@ -16,9 +17,9 @@ logger = setup_logger("page_scraping")
+@@ -16,9 +17,7 @@ logger = setup_logger("page_scraping")
  st.set_page_config(page_title="FlashNews: News Scraper", layout="wide", page_icon="📰")
  
  # --- PROTEKSI HALAMAN ---
 -if not st.session_state.get("authenticated", False):
 -    st.warning("⚠️ Silakan lakukan otorisasi akses (Login) melalui halaman utama (Homepage) terlebih dahulu.")
 -    st.stop()
-+# Memakai session_state yang sama dengan Homepage, jadi begitu login di
-+# Homepage, halaman ini tidak akan minta login lagi (selama tab tidak ditutup/refresh).
 +require_login()
  
  try:

@@ -13,7 +13,7 @@ class DatabaseService:
 
     def __init__(self):
         self.supabase_url = st.secrets.get("SUPABASE_URL", "https://qbqvtdhaktjbohyfwkvi.supabase.co")
-        self.default_api_key = st.secrets.get("SUPABASE_PUBLISHABLE_KEY", "")
+        self.default_api_key = st.secrets.get("SUPABASE_ANON_KEY", "")
 
     def _get_client(self, custom_api_key: str = None) -> Client:
         """Helper untuk membuat client dengan opsional API Key (untuk admin)."""
