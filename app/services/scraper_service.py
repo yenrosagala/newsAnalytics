@@ -7,6 +7,8 @@ from app.core.logger import get_logger
 from app.services.ai_service import ai_service
 from app.services.sentiment_service import sentiment_service
 from app.services.database_service import db_service
+from urllib.parse import urlparse
+from newspaper import Article
 
 try:
     from googlenewsdecoder import gnewsdecoder
@@ -73,30 +75,33 @@ class ScraperService:
         return fallback_text
 
     def _process_single_article(self, item: ET.Element, keyword: str) -> Optional[Dict]:
-        """Memproses satu artikel: resolve URL, ekstrak isi, dan analisis sentimen."""
+        """Memproses satu artikel: resolve URL, ekstrak metadata via newspaper4k, dan analisis sentimen."""
         try:
             link = item.findtext('link')
-            title = item.findtext('title') or ""
+            raw_title = item.findtext('title') or ""
             if not link:
                 return None
 
             description = item.findtext('description') or ""
             real_url = self._resolve_real_url(link)
-            full_text = self._extract_full_text(real_url, fallback_text=description)
+            
+            # Memanggil fungsi ekstraksi newspaper4k
+            meta = self._extract_article_metadata(real_url, fallback_title=raw_title, fallback_desc=description)
 
-            sentiment_label = sentiment_service.analyze_text(full_text) if full_text else "NEUTRAL"
+            sentiment_label = sentiment_service.analyze_text(meta["content"]) if meta["content"] else "NEUTRAL"
 
             return {
-                "title": title,
-                "url": real_url or link,
-                "source": item.findtext('source') or "",
-                "published_date": item.findtext('pubDate') or "",
+                "title": meta["title"],
+                "url": meta["url"],
+                "source": meta["media"],  # Nama media dari domain URL
+                "published_date": meta["publish_date"] or item.findtext('pubDate') or "",
+                "authors": ", ".join(meta["authors"]) if meta["authors"] else "Unknown",
                 "keyword": keyword,
-                "content": full_text,
+                "content": meta["content"],
                 "sentiment": sentiment_label,
             }
         except Exception as e:
-            logger.warning(f"Gagal memproses artikel {item.findtext('title')}: {str(e)}")
+            logger.warning(f"Gagal memproses artikel: {str(e)}")
             return None
 
     def _fetch_and_process(self, keyword: str, limit: int, region: str) -> List[Dict]:
@@ -183,6 +188,54 @@ class ScraperService:
         if progress_bar:
             progress_bar.progress(1.0)
         return saved_count
+        
+def _extract_article_metadata(self, url: str, fallback_title: str = "", fallback_desc: str = "") -> dict:
+        """
+        Mengambil metadata lengkap artikel menggunakan newspaper4k:
+        - Nama media dari domain URL
+        - Tanggal publikasi (article.publish_date)
+        - Judul (article.title)
+        - Penulis (article.authors)
+        - URL asli & isi teks lengkap
+        """
+        # 1. Ekstraksi Nama Media dari Domain URL
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc
+        if domain.startswith("www."):
+            domain = domain[4:]
+        media_name = domain.split('.')[0].capitalize() if domain else "Unknown"
+
+        # Inisialisasi default values
+        title = fallback_title
+        publish_date = None
+        authors = []
+        full_text = fallback_desc
+
+        if Article and url:
+            try:
+                article = Article(url)
+                article.download()
+                article.parse()
+                
+                if article.title:
+                    title = article.title
+                if article.publish_date:
+                    publish_date = article.publish_date
+                if article.authors:
+                    authors = article.authors
+                if article.text and len(article.text.strip()) > 100:
+                    full_text = article.text.strip()
+            except Exception as e:
+                logger.warning(f"Gagal mengekstrak artikel via newspaper4k dari {url}: {e}")
+
+        return {
+            "media": media_name,
+            "title": title,
+            "publish_date": publish_date,
+            "authors": authors,
+            "content": full_text,
+            "url": url
+        }
 
 
 scraper_service = ScraperService()
