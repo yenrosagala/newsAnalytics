@@ -88,6 +88,7 @@ def _articles_to_bibliography(articles: List[Dict]) -> List[Dict]:
             "date": art.get("published_date") or "-",
             "title": art.get("title") or "Tanpa Judul",
             "url": art.get("url") or "#",
+            "author": art.get("authors") or "Tidak diketahui",
         }
         for art in articles
     ]

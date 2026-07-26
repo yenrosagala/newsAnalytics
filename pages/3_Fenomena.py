@@ -133,7 +133,7 @@ with tab_recursive:
                     if level_info.get("bibliography"):
                         with st.expander(f"📚 Daftar Pustaka Level {depth}"):
                             for idx, bib in enumerate(level_info["bibliography"], 1):
-                                st.markdown(f"[{idx}] {bib['media']}. {bib['date']}. **{bib['title']}**. [Link]({bib['url']})")
+                                st.markdown(f"[{idx}] {bib.get('author', 'Tidak diketahui')}. {bib['media']}. {bib['date']}. **{bib['title']}**. [Link]({bib['url']})")
                     if level_info["next_keywords"]:
                         st.markdown("**➡️ Keyword Turunan:**")
                         st.info(" | ".join([f"`{kw}`" for kw in level_info["next_keywords"]]))
@@ -183,8 +183,9 @@ with tab_pdf_recursive:
                         pub_date = pub_date[:10]
 
                     title = bib.get('title', 'Tanpa Judul')
-                    
-                    bib_entry = f"[{bib_counter}] {media_domain}. {pub_date}. {title}. {url_link}"
+                    author = bib.get('author', 'Tidak diketahui')
+
+                    bib_entry = f"[{bib_counter}] {author}. {media_domain}. {pub_date}. {title}. {url_link}"
                     bibliography_sections.append(bib_entry)
                     bib_counter += 1
 
@@ -255,5 +256,6 @@ if stored_result_history:
                             pub_date = pub_date[:10]
                             
                         title = bib.get('title', 'Tanpa Judul')
-                        st.markdown(f"[{idx}] {media_domain}. {pub_date}. **{title}**. {url_link}")
+                        author = bib.get('author', 'Tidak diketahui')
+                        st.markdown(f"[{idx}] {author}. {media_domain}. {pub_date}. **{title}**. {url_link}")
             st.divider()

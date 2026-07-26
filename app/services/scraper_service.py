@@ -188,54 +188,6 @@ class ScraperService:
         if progress_bar:
             progress_bar.progress(1.0)
         return saved_count
-        
-def _extract_article_metadata(self, url: str, fallback_title: str = "", fallback_desc: str = "") -> dict:
-        """
-        Mengambil metadata lengkap artikel menggunakan newspaper4k:
-        - Nama media dari domain URL
-        - Tanggal publikasi (article.publish_date)
-        - Judul (article.title)
-        - Penulis (article.authors)
-        - URL asli & isi teks lengkap
-        """
-        # 1. Ekstraksi Nama Media dari Domain URL
-        parsed_url = urlparse(url)
-        domain = parsed_url.netloc
-        if domain.startswith("www."):
-            domain = domain[4:]
-        media_name = domain.split('.')[0].capitalize() if domain else "Unknown"
-
-        # Inisialisasi default values
-        title = fallback_title
-        publish_date = None
-        authors = []
-        full_text = fallback_desc
-
-        if Article and url:
-            try:
-                article = Article(url)
-                article.download()
-                article.parse()
-                
-                if article.title:
-                    title = article.title
-                if article.publish_date:
-                    publish_date = article.publish_date
-                if article.authors:
-                    authors = article.authors
-                if article.text and len(article.text.strip()) > 100:
-                    full_text = article.text.strip()
-            except Exception as e:
-                logger.warning(f"Gagal mengekstrak artikel via newspaper4k dari {url}: {e}")
-
-        return {
-            "media": media_name,
-            "title": title,
-            "publish_date": publish_date,
-            "authors": authors,
-            "content": full_text,
-            "url": url
-        }
 
     def _extract_article_metadata(self, url: str, fallback_title: str = "", fallback_desc: str = "") -> dict:
         """
