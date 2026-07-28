@@ -2,6 +2,7 @@ import streamlit as st
 import asyncio
 import pandas as pd
 from datetime import datetime
+from urllib.parse import urlparse
 from app.services.database_service import db_service
 from app.services.ai_service import ai_service
 from app.core.config import Config
@@ -9,6 +10,7 @@ from app.core.logger import setup_logger
 from app.generate_pdf import generate_pdf_report
 from app.prompts.executive_summary import get_executive_summary_prompt
 from app.core.auth import require_login
+
 
 config = Config()
 logger = setup_logger("page_fenomena")
@@ -58,7 +60,6 @@ with tab_recursive:
                 )
             )
             
-            # Validasi apakah result_tree benar-benar ada isinya
             if not result_tree or not isinstance(result_tree, list):
                 status_container.empty()
                 prog_bar.empty()
@@ -88,21 +89,47 @@ with tab_recursive:
                 
                 final_executive_summary = ""
                 if ai_service.client:
-                    try:
-                        response = ai_service.client.models.generate_content(model=ai_service.model_name, contents=prompt_exec)
-                        final_executive_summary = response.text
-                    except Exception as llm_err:
-                        logger.error(f"Gagal menyusun ringkasan: {llm_err}")
+                    # 🔄 Mekanisme Rotasi Ganda (Model & API Key) dengan Retry Otomatis saat Terkena Limit (429)
+                    max_attempts = (len(ai_service.api_keys) * len(ai_service.models_list)) if getattr(ai_service, 'api_keys', None) else 5
+                    attempt = 0
+                    success = False
+
+                    while attempt < max_attempts and not success:
+                        try:
+                            response = ai_service.client.models.generate_content(
+                                model=ai_service.model_name, 
+                                contents=prompt_exec
+                            )
+                            final_executive_summary = response.text
+                            success = True
+                        except Exception as llm_err:
+                            err_str = str(llm_err)
+                            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+                                logger.warning(f"⚠️ Limit tercapai pada Model {ai_service.model_name}. Mencoba rotasi otomatis...")
+                                
+                                # Rotasi model terlebih dahulu, jika habis putar kunci API
+                                rotated_model = ai_service.rotate_model() if hasattr(ai_service, 'rotate_model') else False
+                                if not rotated_model or getattr(ai_service, 'active_model_index', 0) == 0:
+                                    if hasattr(ai_service, 'rotate_key_for_level'):
+                                        ai_service.rotate_key_for_level(attempt + 1)
+                                    elif hasattr(ai_service, 'rotate_key'):
+                                        ai_service.rotate_key()
+                                        
+                                attempt += 1
+                            else:
+                                logger.error(f"Gagal menyusun ringkasan: {llm_err}")
+                                break
+                    
+                    # Fallback darurat jika seluruh rotasi habis
+                    if not final_executive_summary:
                         final_executive_summary = concatenated_content
                 else:
                     final_executive_summary = concatenated_content
 
-                # 🚀 PERBAIKAN: Penempatan simpan sesi & database dipindah KEDALAM blok ini (setelah variabel terdefinisi)
                 st.session_state["last_recursive_result"] = result_tree
                 st.session_state["last_recursive_query"] = initial_problem_query
                 st.session_state["last_executive_summary"] = final_executive_summary
                 
-                # Simpan permanen ke database baru
                 try:
                     db_service.save_root_cause_analysis(
                         initial_query=initial_problem_query,
@@ -116,7 +143,6 @@ with tab_recursive:
                 prog_bar.empty()
                 st.success("✅ Analisis Akar Masalah (5 Why) & Penyusunan Laporan Eksekutif Selesai!")
                 
-                # Render hasil ke layar
                 for level_info in result_tree:
                     depth = level_info["depth"]
                     st.markdown(f"### 📍 Level {depth} (Kedalaman {depth} dari 5)")
@@ -161,8 +187,35 @@ with tab_pdf_recursive:
         insights_list.append(f"Topik utama investigasi: {stored_query}")
         insights_list.append(f"Kedalaman analisis (Levels): {len(stored_result)}")
 
-        from urllib.parse import urlparse
-        bibliography_sections = ["\n\n## Daftar Pustaka"]
+        # --- PEMBENTUKAN KONTROL STRUKTUR LAPORAN PDF YANG LENGKAP & TERSTRUKTUR ---
+        pdf_sections = []
+        
+        # 1. Ringkasan Eksekutif Komprehensif
+        pdf_sections.append("## Ringkasan Eksekutif Komprehensif")
+        pdf_sections.append(stored_exec_summary)
+        pdf_sections.append("\n---\n")
+
+        # 2. Analisis Setiap Level secara Mendalam
+        pdf_sections.append("## Analisis Per Level 5-Why")
+        for lvl in stored_result:
+            depth = lvl["depth"]
+            queries_str = ", ".join(lvl.get("queries_used", []))
+            summary_lvl = lvl.get("summary", "Tidak ada ringkasan level.")
+            causes_lvl = lvl.get("causes_extracted", [])
+            
+            pdf_sections.append(f"### Level {depth}")
+            pdf_sections.append(f"**Query Pencarian:** `{queries_str}`")
+            pdf_sections.append(f"**Artikel Tervalidasi:** {lvl.get('articles_found', 0)} artikel")
+            pdf_sections.append(f"**Ringkasan Level:**\n{summary_lvl}")
+            
+            if causes_lvl:
+                pdf_sections.append("**Penyebab Terindikasi:**")
+                for c in causes_lvl:
+                    pdf_sections.append(f"- {c}")
+            pdf_sections.append("\n")
+
+        # 3. Daftar Pustaka Komprehensif Menggabungkan Seluruh Pustaka Setiap Level
+        pdf_sections.append("## Daftar Pustaka Komprehensif")
         bib_counter = 1
         for lvl in stored_result:
             if lvl.get("bibliography"):
@@ -186,14 +239,14 @@ with tab_pdf_recursive:
                     author = bib.get('author', 'Tidak diketahui')
 
                     bib_entry = f"[{bib_counter}] {author}. {media_domain}. {pub_date}. {title}. {url_link}"
-                    bibliography_sections.append(bib_entry)
+                    pdf_sections.append(bib_entry)
                     bib_counter += 1
 
-        full_text_for_pdf = stored_exec_summary + "\n" + "\n".join(bibliography_sections)
+        full_text_for_pdf = "\n".join(pdf_sections)
         df_dummy = db_service.get_latest_scraped_data(limit=10)
 
         if st.button("📥 Proses File PDF Recursive", type="primary", key="btn_gen_pdf_recursive"):
-            with st.spinner("Menyiapkan dokumen PDF laporan eksekutif lengkap..."):
+            with st.spinner("Menyiapkan dokumen PDF laporan eksekutif lengkap dengan analisis per level dan daftar pustaka gabungan..."):
                 try:
                     pdf_bytes = generate_pdf_report(
                         filtered_df=df_dummy,
