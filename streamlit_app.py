@@ -1,87 +1,68 @@
 import streamlit as st
-from app.core.config import Config
-from app.core.logger import get_logger
-from app.utils.session import init_state
-from app.utils.session import init_session_state
-from app.core.auth import render_auth_sidebar
+import os
 
-# 1. Setup Logger
-logger = get_logger("MainApp")
-logger.info("Aplikasi Google News Scrapper berhasil dimuat.")
+st.set_page_config(
+    page_title="NewsAnalytics AI Hub",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-
-# 2. Inisialisasi Session State Terpusat
-# 'authenticated' disimpan di st.session_state, yang otomatis dibagikan ke
-# SEMUA halaman (Scraping/Dashboard/Fenomena) selama tab browser yang sama
-# masih terbuka -- jadi login cukup sekali per sesi, tidak perlu login ulang
-# setiap pindah halaman.
-def init_app_state():
-    init_session_state("authenticated", False)
-    init_session_state("role", "user")
-    init_session_state("current_keyword", "")
-    init_session_state("is_scrapped", False)
-
-init_app_state()
-
-# 3. Konfigurasi Halaman Streamlit
-st.set_page_config(page_title=Config.PAGE_TITLE, page_icon=Config.PAGE_ICON, layout=Config.LAYOUT)
-
-# 4. Inject CSS Eksternal
-try:
-    with open("app/assets/style.css") as f:
+css_path = "app/assets/style.css"
+if os.path.exists(css_path):
+    with open(css_path) as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-except FileNotFoundError:
-    logger.warning("File style.css tidak ditemukan di folder assets. Menggunakan style default.")
 
-# 5. Inisialisasi State Awal Aplikasi
-init_state("search_keyword", "")
-init_state("is_scrapped", False)
+with st.sidebar:
+    st.markdown("### ⚡ NewsAnalytics AI")
+    st.caption("Futuristic Intelligence & Root Cause Engine")
+    st.markdown("---")
+    st.page_link("streamlit_app.py", label="Home Dashboard", icon="🏠")
+    st.page_link("pages/1_Scraping.py", label="Scraping & Database", icon="📥")
+    st.page_link("pages/2_Dashboard.py", label="Analytics & Metrics", icon="📊")
+    st.page_link("pages/3_Fenomena.py", label="Fenomena (5-Why)", icon="🔍")
+    
+    st.markdown("---")
+    st.markdown("""
+    <div style="background: rgba(0,240,255,0.05); padding: 12px; border-radius: 8px; border: 1px solid rgba(0,240,255,0.1);">
+        <small style="color: #00f0ff; font-weight: 600;">SYSTEM STATUS</small><br>
+        <span style="color: #10b981; font-size: 0.85rem;">● AI Engines Online</span><br>
+        <span style="color: #94a3b8; font-size: 0.75rem;">v2.5.0 Professional</span>
+    </div>
+    """, unsafe_allow_html=True)
 
-# 6. Widget Login Admin di Sidebar (opsional -- publik tidak wajib login)
-render_auth_sidebar()
+st.markdown("# ⚡ NewsAnalytics Professional Hub")
+st.markdown("### Platform Analisis Berita & Root Cause Intelligence Berbasis AI")
+st.markdown("---")
 
-# 7. Header Halaman Utama
-st.markdown("<div class='main-header'>📰 Google News Scraper & Sentiment Analyzer</div>", unsafe_allow_html=True)
+col1, col2, col3 = st.columns(3)
 
-st.markdown("""
-### Selamat Datang di Aplikasi Analisis Berita
-Aplikasi ini dirancang untuk membantu Anda melakukan *scraping* berita dari Google News secara otomatis,
-menganalisis sentimen publik, dan mengekspor hasilnya ke dalam format laporan yang siap pakai.
-""")
+with col1:
+    st.markdown("""
+    <div class="feature-card">
+        <h3>📥 Scraping & Executive</h3>
+        <p style="color: #94a3b8; font-size: 0.9rem;">Ambil data berita terkini secara real-time dan kelola ringkasan eksekutif tersimpan melalui tabel terstruktur.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("Buka Scraping Hub", key="btn_scraping", use_container_width=True):
+        st.switch_page("pages/1_Scraping.py")
 
-st.divider()
+with col2:
+    st.markdown("""
+    <div class="feature-card">
+        <h3>📊 Analytics Dashboard</h3>
+        <p style="color: #94a3b8; font-size: 0.9rem;">Visualisasi data mendalam dengan filter horizontal di bagian atas untuk ruang kerja grafik yang lebih luas.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("Buka Dashboard", key="btn_dashboard", use_container_width=True):
+        st.switch_page("pages/2_Dashboard.py")
 
-# 8. Menu Utama di Halaman Tengah (bukan hanya di sidebar)
-st.markdown("#### 🚀 Pilih Menu untuk Memulai")
-
-menu_items = [
-    {
-        "icon": "📰",
-        "title": "Scraping",
-        "desc": "Ambil berita terbaru dari Google News berdasarkan kata kunci, lalu hasilkan ringkasan eksekutif otomatis.",
-        "page": "pages/1_Scraping.py",
-    },
-    {
-        "icon": "📊",
-        "title": "Dashboard",
-        "desc": "Visualisasikan data berita yang sudah tersimpan: distribusi sentimen, media kontributor, dan detail artikel.",
-        "page": "pages/2_Dashboard.py",
-    },
-    {
-        "icon": "🧠",
-        "title": "Fenomena",
-        "desc": "Jalankan analisis akar masalah (Root Cause / 5-Why) secara bertingkat terhadap sebuah topik/fenomena.",
-        "page": "pages/3_Fenomena.py",
-    },
-]
-
-cols = st.columns(3)
-for col, item in zip(cols, menu_items):
-    with col:
-        with st.container(border=True):
-            st.markdown(f"### {item['icon']} {item['title']}")
-            st.caption(item["desc"])
-            st.page_link(item["page"], label=f"Buka {item['title']}", icon="➡️", use_container_width=True)
-
-st.divider()
-st.info("💡 Anda juga bisa berpindah halaman kapan saja lewat menu navigasi di *sidebar* sebelah kiri.")
+with col3:
+    st.markdown("""
+    <div class="feature-card">
+        <h3>🔍 Fenomena & 5-Why</h3>
+        <p style="color: #94a3b8; font-size: 0.9rem;">Analisis akar masalah secara rekursif mendalam dilengkapi panduan visual interaktif pada area kosong.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    if st.button("Buka Fenomena Analysis", key="btn_fenomena", use_container_width=True):
+        st.switch_page("pages/3_Fenomena.py")
