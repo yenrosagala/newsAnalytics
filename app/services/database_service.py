@@ -12,14 +12,23 @@ class DatabaseService:
     """Service layer untuk menangani interaksi dengan Supabase."""
 
     def __init__(self):
-        self.supabase_url = st.secrets.get("SUPABASE_URL", "https://qbqvtdhaktjbohyfwkvi.supabase.co")
+        self.supabase_url = st.secrets.get("SUPABASE_URL", "")
         self.default_api_key = st.secrets.get("SUPABASE_ANON_KEY", "")
+
+        if not self.supabase_url or not self.default_api_key:
+            logger.error(
+                "SUPABASE_URL dan/atau SUPABASE_ANON_KEY belum dikonfigurasi di st.secrets. "
+                "Buat file .streamlit/secrets.toml (lokal) atau isi menu Settings > Secrets "
+                "(Streamlit Cloud) dengan kedua key tersebut."
+            )
 
     def _get_client(self, custom_api_key: str = None) -> Client:
         """Helper untuk membuat client dengan opsional API Key (untuk admin)."""
+        if not self.supabase_url:
+            raise ValueError("SUPABASE_URL belum dikonfigurasi di st.secrets!")
         api_key = custom_api_key or self.default_api_key
         if not api_key:
-            raise ValueError("API Key Supabase tidak ditemukan!")
+            raise ValueError("SUPABASE_ANON_KEY belum dikonfigurasi di st.secrets!")
         return create_client(self.supabase_url, api_key)
 
     def get_latest_scraped_data(self, limit: int = 1000) -> pd.DataFrame:
