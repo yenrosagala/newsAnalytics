@@ -3,6 +3,7 @@ import asyncio
 import json
 import re
 from datetime import datetime
+import os
 
 from app.services.database_service import db_service
 from app.services.ai_service import ai_service
@@ -21,31 +22,42 @@ from app.recursive_engine import (
 config = Config()
 logger = setup_logger("page_fenomena")
 
-st.set_page_config(page_title="FlashNews: Root Cause Analysis", layout="wide", page_icon="🧠")
 
-# Halaman ini terbuka untuk pengguna umum -- tidak perlu login.
+
+# Memuat File CSS Kustom (jika tersedia)
+css_path = "app/assets/style.css"
+if os.path.exists(css_path):
+    with open(css_path) as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+
+
+# Sidebar Navigasi & Informasi Konsisten dengan Halaman Lain
+with st.sidebar:
+    st.markdown("### ⚡ NewsAnalytics AI")
+    st.markdown("---")
+    st.page_link("streamlit_app.py", label="Home Dashboard", icon="🏠")
+    st.page_link("pages/1_Scraping.py", label="News Insight", icon="📥")
+    st.page_link("pages/2_Dashboard.py", label="Analytics & Metrics", icon="📊")
+    st.page_link("pages/3_Fenomena.py", label="Fenomena (5-Why)", icon="🔍")
+    st.markdown("---")
+    st.markdown("### ℹ️ Informasi")
+    st.caption("Fitur Recursive 5 Why mengeksplorasi berita secara berlapis guna mengidentifikasi akar permasalahan di balik suatu fenomena.")
+
+# Konfigurasi Halaman (Wajib dipanggil pertama kali)
+st.set_page_config(page_title="Fenomena & Root Cause", layout="wide", page_icon="🔍")
+
+# Render autentikasi sidebar
 render_auth_sidebar()
 
-try:
-    with open("app/assets/style.css") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-except FileNotFoundError:
-    pass
-
-st.title("🧠 FlashNews: Root Cause Analysis")
-st.write("Eksplorasi mendalam mengenai akar masalah dan tren fenomena berita menggunakan pendekatan rekursif 5-Why cerdas.")
-
-st.sidebar.markdown("### ℹ️ Informasi")
-st.sidebar.caption("Fitur Recursive 5 Why mengeksplorasi berita secara berlapis guna mengidentifikasi akar permasalahan di balik suatu fenomena.")
+# Header Halaman Utama dengan UI/UX Modern
+st.markdown("# 🔍 Fenomena & Recursive 5-Why Analysis")
+st.markdown("Identifikasi akar masalah secara mendalam berdasarkan temuan berita dan anomali data.")
+st.markdown("---")
 
 
 def _parse_title_summary_json(raw_text: str, fallback_query: str) -> dict:
-    """Parsing defensif untuk output JSON {title, executive_summary} dari AI.
-
-    Kalau AI gagal mengembalikan JSON valid (mis. karena error API atau
-    format tak terduga), sistem tetap menghasilkan judul & ringkasan yang
-    masuk akal alih-alih menampilkan JSON mentah/kosong ke pengguna.
-    """
+    """Parsing defensif untuk output JSON {title, executive_summary} dari AI."""
     if not raw_text:
         return {"title": f"Analisis Akar Masalah: {fallback_query}", "executive_summary": ""}
 
@@ -66,43 +78,63 @@ def _parse_title_summary_json(raw_text: str, fallback_query: str) -> dict:
 
 
 def _render_level_details(level_info: dict, depth: int):
-    """Helper render satu blok level (dipakai di tab hasil baru & di riwayat,
-    supaya tidak ada logic tampilan yang terduplikasi)."""
-    st.markdown(f"### 📍 Level {depth}")
-    st.write(f"**Query Pencarian:** `{', '.join(level_info['queries_used'])}`")
-    st.write(f"**Artikel Diekstrak:** {level_info['articles_found']} artikel")
+    """Helper render satu blok level dengan container kartu fitur modern."""
+    is_root_cause = depth == 5
+    card_style = 'border-color: #00f0ff; background: rgba(0,240,255,0.05);' if is_root_cause else ''
+    
+    st.markdown(f"""
+    <div class="feature-card" style="{card_style}">
+        <h4 style="color: {'#00f0ff' if is_root_cause else 'inherit'};">📍 Level {depth}: {', '.join(level_info.get('queries_used', []))}</h4>
+        <p style="color: #94a3b8; margin-bottom: 8px;"><b>Artikel Diekstrak:</b> {level_info.get('articles_found', 0)} artikel</p>
+    """, unsafe_allow_html=True)
 
     if level_info.get("summary"):
-        st.markdown("**📝 Ringkasan Level:**")
-        st.write(level_info["summary"])
+        st.markdown(f"<p style='color: #cbd5e1;'><b>📝 Ringkasan Level:</b> {level_info['summary']}</p>", unsafe_allow_html=True)
+    
     if level_info.get("causes_extracted"):
-        st.markdown("**🔍 Penyebab Teridentifikasi:**")
+        st.markdown("<b>🔍 Penyebab Teridentifikasi:</b>", unsafe_allow_html=True)
         for c in level_info["causes_extracted"]:
             st.markdown(f"- 🔴 {c}")
+            
     if level_info.get("bibliography"):
         with st.expander(f"📚 Daftar Pustaka Level {depth}"):
             for idx, bib in enumerate(level_info["bibliography"], 1):
                 st.markdown(f"[{idx}] {bib.get('author', 'Tidak diketahui')}. {bib.get('media', '-')}. {bib.get('date', '-')}. **{bib.get('title', 'Tanpa Judul')}**. [Link]({bib.get('url', '#')})")
+                
     if level_info.get("next_keywords"):
         st.markdown("**➡️ Keyword Turunan:**")
         st.info(" | ".join([f"`{kw}`" for kw in level_info["next_keywords"]]))
-    st.divider()
+        
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
+# --- STRUKTUR TAB UTAMA ---
 tab_recursive, tab_pdf_recursive = st.tabs(["🚀 Jalankan Analisis 5 Why", "📄 Download PDF Laporan Recursive"])
 
 with tab_recursive:
-    st.caption("Sistem akan melakukan pencarian dan penelusuran berita bertingkat secara otomatis hingga 5 level untuk menemukan akar masalah.")
-    initial_problem_query = st.text_input("Masukkan Masalah Utama / Topik Awal:", value="Sensus Ekonomi 2026 Papua kendala", key="input_query_tab1")
+    with st.container():
+        st.markdown('<div class="feature-card">', unsafe_allow_html=True)
+        st.subheader("⚙️ Konfigurasi Analisis Fenomena")
+        initial_problem_query = st.text_area(
+            "Deskripsi Fenomena / Masalah Utama", 
+            value=st.session_state.get("last_recursive_query", "Sensus Ekonomi 2026 Papua kendala"), 
+            key="input_query_tab1"
+        )
+        depth = st.slider("Kedalaman Analisis (Recursive Level)", 3, 7, 5, key="slider_depth_analysis")
+        run_analysis = st.button("🚀 Jalankan Recursive 5 Why Analysis", type="primary", key="btn_run_recursive", use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    if st.button("🚀 Jalankan Recursive 5 Why Analysis", type="primary", key="btn_run_recursive"):
+    st.markdown("---")
+
+    # Logika Eksekusi Analisis Berdasarkan Tombol
+    if run_analysis:
         prog_bar = st.progress(0.0)
         status_container = st.empty()
 
         try:
             result_tree = asyncio.run(
                 run_recursive_5why_pipeline_with_progress(
-                    initial_query=initial_problem_query, max_depth=5, progress_bar=prog_bar, status_text=status_container
+                    initial_query=initial_problem_query, max_depth=depth, progress_bar=prog_bar, status_text=status_container
                 )
             )
 
@@ -113,9 +145,6 @@ with tab_recursive:
             else:
                 status_container.text("Menyusun judul & ringkasan eksekutif komprehensif via AI Service...")
 
-                # Daftar pustaka dikonsolidasi & DINOMORI SISTEM (bukan oleh AI) --
-                # supaya sitasi [n] di ringkasan eksekutif pasti cocok dengan
-                # Daftar Pustaka final di PDF.
                 consolidated_bib = consolidate_bibliography(result_tree)
 
                 prompt_exec = get_recursive_executive_summary_prompt(
@@ -163,7 +192,7 @@ with tab_recursive:
                     st.markdown(final_executive_summary)
                     st.divider()
 
-                st.markdown("### 🔬 Analisis Bertingkat per Level")
+                st.markdown("### 🌳 Hasil Pohon Akar Masalah (Root Cause Tree)")
                 for level_info in result_tree:
                     _render_level_details(level_info, level_info["depth"])
 
@@ -171,6 +200,39 @@ with tab_recursive:
             status_container.empty()
             prog_bar.empty()
             st.error(f"Terjadi kesalahan sistem pada pipeline recursive: {e}")
+    else:
+        # Tampilan Placeholder Elegan Saat Belum Dijalankan
+        stored_result_history = st.session_state.get("last_recursive_result", None)
+        
+        if not stored_result_history:
+            st.markdown("""
+            <div class="feature-card" style="text-align: center; padding: 48px 24px; border: 2px dashed rgba(0, 240, 255, 0.25);">
+                <div style="font-size: 3rem; margin-bottom: 12px;">🔍</div>
+                <h3 style="color: #00f0ff;">Belum Ada Analisis yang Dijalankan</h3>
+                <p style="color: #94a3b8; max-width: 600px; margin: 0 auto 20px auto;">
+                    Masukkan deskripsi fenomena di atas dan klik tombol <b>Jalankan Recursive 5 Why Analysis</b>. 
+                    Sistem AI akan secara otomatis memecah masalah menjadi tingkatan akar penyebab (Root Cause) berdasarkan data berita terkini.
+                </p>
+                <div style="display: inline-block; background: rgba(0,240,255,0.08); padding: 8px 16px; border-radius: 6px; border: 1px solid rgba(0,240,255,0.2); color: #00f0ff; font-size: 0.85rem;">
+                    💡 <b>Tips:</b> Semakin spesifik deskripsi fenomena, semakin akurat hasil pohon keputusan 5-Why yang dihasilkan.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            # Tampilkan Riwayat Otomatis Jika Sudah Ada di Session State
+            stored_query_history = st.session_state.get("last_recursive_query", "")
+            stored_title_history = st.session_state.get("last_report_title", "")
+            stored_exec_summary = st.session_state.get("last_executive_summary", "")
+
+            st.markdown(f"## {stored_title_history or stored_query_history}")
+            if stored_exec_summary:
+                st.markdown("### 📋 Ringkasan Eksekutif")
+                st.markdown(stored_exec_summary)
+                st.divider()
+
+            st.markdown("### 🌳 Hasil Pohon Akar Masalah Terakhir (Root Cause Tree)")
+            for level_info in stored_result_history:
+                _render_level_details(level_info, level_info["depth"])
 
 with tab_pdf_recursive:
     st.subheader("📄 Cetak & Download PDF Laporan Recursive 5-Why")
@@ -190,7 +252,7 @@ with tab_pdf_recursive:
             f"Total sumber pustaka: {len(stored_bibliography)}"
         )
 
-        if st.button("📥 Proses File PDF Recursive", type="primary", key="btn_gen_pdf_recursive"):
+        if st.button("📥 Proses File PDF Recursive", type="primary", key="btn_gen_pdf_recursive", use_container_width=True):
             with st.spinner("Menyiapkan dokumen PDF laporan eksekutif lengkap..."):
                 try:
                     pdf_bytes = report_service.generate_recursive_pdf(
@@ -212,14 +274,3 @@ with tab_pdf_recursive:
                         )
                 except Exception as pdf_err:
                     st.error(f"Gagal memproses file PDF: {pdf_err}")
-
-# --- TAMPILKAN RIWAYAT / ROOT CAUSE ANALISIS SEBELUMNYA ---
-stored_result_history = st.session_state.get("last_recursive_result", None)
-stored_query_history = st.session_state.get("last_recursive_query", "")
-stored_title_history = st.session_state.get("last_report_title", "")
-
-if stored_result_history:
-    with st.expander(f"📂 Riwayat Analisis Sebelumnya: '{stored_title_history or stored_query_history}'", expanded=False):
-        st.info(f"Menampilkan hasil investigasi rekursif terakhir untuk topik: **{stored_query_history}**")
-        for level_info in stored_result_history:
-            _render_level_details(level_info, level_info["depth"])

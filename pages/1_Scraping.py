@@ -1,6 +1,8 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import os
+
 from app.services.scraper_service import scraper_service
 from app.services.database_service import db_service 
 from app.services.ai_service import ai_service
@@ -14,31 +16,59 @@ from app.core.auth import render_auth_sidebar
 config = Config()
 logger = setup_logger("page_scraping")
 
-st.set_page_config(page_title="FlashNews: News Scraper", layout="wide", page_icon="📰")
 
-# Halaman ini terbuka untuk pengguna umum -- tidak perlu login.
-# Widget di bawah hanya menampilkan status/opsi login admin di sidebar.
-render_auth_sidebar()
 
-try:
-    with open("app/assets/style.css") as f:
+# Memuat File CSS Kustom (jika tersedia)
+css_path = "app/assets/style.css"
+if os.path.exists(css_path):
+    with open(css_path) as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-except FileNotFoundError:
+else:
     logger.warning("File style.css tidak ditemukan di folder assets.")
 
-st.title("📰 News Scraper & Executive Summary Hub")
-st.subheader("Scraping Berita & Analisis Sentimen Otomatis")
+with st.sidebar:
+    st.markdown("### ⚡ NewsAnalytics AI")
+    st.markdown("---")
+    st.page_link("streamlit_app.py", label="Home Dashboard", icon="🏠")
+    st.page_link("pages/1_Scraping.py", label="News Insight", icon="📥")
+    st.page_link("pages/2_Dashboard.py", label="Analytics & Metrics", icon="📊")
+    st.page_link("pages/3_Fenomena.py", label="Fenomena (5-Why)", icon="🔍")
+    st.markdown("---")
+    st.markdown("### ℹ️ Informasi")
+    st.caption("Fitur mengeksplorasi berita dan memberikan insight secara menyeluruh.")
 
-# is_admin dipakai di beberapa tempat lain di halaman ini untuk fitur khusus admin
+# Konfigurasi Halaman (Wajib dipanggil pertama kali)
+st.set_page_config(page_title="Scraping & Database", layout="wide", page_icon="📥")
+
+# Render autentikasi sidebar
+render_auth_sidebar()
+
+# Header Halaman Utama dengan UI/UX Modern
+st.markdown("# 📥 Google News Scraping & Executive Summary")
+st.markdown("Masukkan kata kunci untuk mengambil data berita terbaru dan kelola database executive summary.")
+st.markdown("---")
+
+# Variabel status admin
 is_admin = st.session_state.get("role") == "admin"
 
-# --- BAGIAN UTAMA: SCRAPING BERITA & OTOMATIS PROSES SUMMARY ---
-with st.form("scraping_form"):
+# --- BAGIAN UTAMA: FORM PARAMETER SCRAPING BERITA ---
+with st.container():
+    st.markdown('<div class="feature-card">', unsafe_allow_html=True)
+    st.subheader("⚙️ Parameter Pencarian Berita")
     st.write("Masukkan topik atau kata kunci berita (Pencarian otomatis difilter dari 1 Januari 2026).")
-    keyword = st.text_input("Kata Kunci (Keyword):", st.session_state.get("current_keyword", ""))
     
-    num_results = st.number_input("Jumlah Berita:", min_value=5, max_value=50, value=config.DEFAULT_NUM_RESULTS, step=5)
-    submit_scraping = st.form_submit_button("Mulai Scraping & Siapkan Laporan")
+    with st.form("scraping_form"):
+        keyword = st.text_input("Kata Kunci (Keyword):", st.session_state.get("current_keyword", "Transformasi Digital Indonesia"))
+        
+        col_a, col_b = st.columns(2)
+        with col_a:
+            num_results = st.number_input("Jumlah Maksimal Artikel:", min_value=5, max_value=50, value=config.DEFAULT_NUM_RESULTS, step=5)
+        with col_b:
+            sentiment_filter = st.selectbox("Filter Sentimen (Opsional Tampilan)", ["Semua", "Positif", "Netral", "Negatif"])
+            
+        submit_scraping = st.form_submit_button("🚀 Jalankan Scraping & Generate Summary", use_container_width=True, type="primary")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
 if submit_scraping:
     if not keyword.strip():
@@ -173,8 +203,8 @@ if active_keyword_to_summarize:
 
 st.divider()
 
-# --- BAGIAN DAFTAR EXECUTIVE SUMMARY TERAKHIR ---
-st.subheader("📋 Daftar Executive Summary Tersimpan (Database)")
+# --- BAGIAN DAFTAR EXECUTIVE SUMMARY TERAKHIR (DENGAN LAYOUT BARIS RAPI) ---
+st.subheader("🗄️ Daftar Executive Summary Tersimpan (Database)")
 df_latest = db_service.get_latest_scraped_data(limit=5)
 
 if not df_latest.empty:
@@ -184,20 +214,27 @@ if not df_latest.empty:
         df_kw = df_latest[df_latest['kata_kunci'] == kw]
         total_art = len(df_kw)
         
+        # Menggunakan struktur expander dengan tata letak kolom yang bersih ala UI/UX baru
         with st.expander(f"🔑 Topik / Kata Kunci: {kw} ({total_art} Artikel Terkait)"):
-            if st.button(f"📥 Download Laporan PDF '{kw}'", key=f"btn_dl_{kw.replace(' ', '_')}"):
-                with st.spinner(f"Memproses file PDF untuk '{kw}'..."):
-                    pdf_data, err_msg = process_and_get_pdf(kw)
-                    if pdf_data:
-                        st.download_button(
-                            label=f"Klik Disini Untuk Unduh File '{kw}'",
-                            data=bytes(pdf_data),
-                            file_name=f"Laporan_Executive_Summary_{kw.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
-                            mime="application/pdf",
-                            key=f"dl_action_{kw.replace(' ', '_')}",
-                            use_container_width=True
-                        )
-                    else:
-                        st.error(err_msg)
+            col_info1, col_info2 = st.columns([3, 1])
+            with col_info1:
+                st.markdown(f"**Status Dokumen:** Siap Diunduh")
+                st.markdown(f"**Total Artikel Terkumpul:** {total_art} entri")
+            with col_info2:
+                if st.button(f"📥 Unduh PDF", key=f"btn_dl_{kw.replace(' ', '_')}", use_container_width=True):
+                    with st.spinner(f"Memproses file PDF untuk '{kw}'..."):
+                        pdf_data, err_msg = process_and_get_pdf(kw)
+                        if pdf_data:
+                            st.download_button(
+                                label=f"Klik Untuk Unduh File '{kw}'",
+                                data=bytes(pdf_data),
+                                file_name=f"Laporan_Executive_Summary_{kw.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                mime="application/pdf",
+                                key=f"dl_action_{kw.replace(' ', '_')}",
+                                use_container_width=True
+                            )
+                        else:
+                            st.error(err_msg)
+        st.markdown("<hr style='margin: 5px 0; border-color: rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
 else:
     st.info("Belum ada data berita tersimpan di database.")

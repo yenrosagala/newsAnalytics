@@ -363,3 +363,101 @@ div[data-baseweb="select"] span {
     overflow-y: auto !important;
     padding-right: 10px;
 }
+
+.stApp {
+    background: radial-gradient(circle at 50% 20%, #10172a 0%, #07090e 100%);
+    color: #e2e8f0;
+}
+
+[data-testid="stSidebar"] {
+    background-color: #0b0f19;
+    border-right: 1px solid rgba(0, 240, 255, 0.15);
+}
+
+.feature-card {
+    background: rgba(19, 27, 46, 0.7);
+    border: 1px solid rgba(0, 240, 255, 0.2);
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    transition: all 0.3s ease;
+    margin-bottom: 20px;
+}
+.feature-card:hover {
+    border-color: #00f0ff;
+    box-shadow: 0 8px 24px rgba(0, 240, 255, 0.25);
+    transform: translateY(-3px);
+}
+
+.stButton>button {
+    background: linear-gradient(135deg, #00f0ff 0%, #0072ff 100%);
+    color: #07090e;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 24px;
+    transition: all 0.2s ease-in-out;
+    box-shadow: 0 4px 12px rgba(0, 240, 255, 0.3);
+}
+.stButton>button:hover {
+    opacity: 0.9;
+    box-shadow: 0 6px 16px rgba(0, 240, 255, 0.5);
+    transform: scale(1.02);
+}
+
+.horizontal-filter-bar {
+    background: rgba(19, 27, 46, 0.85);
+    border: 1px solid rgba(0, 240, 255, 0.2);
+    padding: 16px;
+    border-radius: 10px;
+    margin-bottom: 24px;
+}
+
+/* Mengatur teks input/textarea agar kontras dengan warna hitam pekat dan background terang */
+div[data-baseweb="textarea"] textarea {
+    color: #000000 !important;
+    background-color: #f8fafc !important;
+    -webkit-text-fill-color: #000000 !important;
+}
+
+/* Memastikan label di atas textarea tetap terlihat kontras */
+div[data-baseweb="textarea"] label {
+    color: #ffffff !important;
+}
+
+/* Menyembunyikan menu navigasi multi-halaman bawaan otomatis Streamlit */
+[data-testid="stSidebarNav"] {
+    display: none !important;
+}
+
+/* Memaksa seluruh teks, paragraf, dan elemen di dalam sidebar menjadi putih kontras */
+[data-testid="stSidebar"] *, 
+[data-testid="stSidebar"] p, 
+[data-testid="stSidebar"] span, 
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] div {
+    color: #ffffff !important;
+}
+
+/* Khusus untuk elemen tautan/halaman (st.page_link) agar teksnya putih bersih dan kontras */
+[data-testid="stSidebar"] [data-testid="stPageLink"] a,
+[data-testid="stSidebar"] a {
+    color: #ffffff !important;
+    fill: #ffffff !important;
+}
+
+/* Efek saat menu disorot (hover) */
+[data-testid="stSidebar"] [data-testid="stPageLink"] a:hover,
+[data-testid="stSidebar"] a:hover {
+    color: #00f0ff !important; /* Berubah menjadi cyan terang */
+}
+
+div.st-key-input_query_tab1 textarea {
+    color: #111111 !important;
+    background-color: #f8f9fa !important;
+    -webkit-text-fill-color: #111111 !important;
+}
+
+div.st-key-input_query_tab1 label p {
+    color: #ffffff !important;
+}

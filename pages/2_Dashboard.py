@@ -10,12 +10,6 @@ from app.core.auth import render_auth_sidebar
 config = Config()
 logger = setup_logger("page_dashboard")
 
-st.set_page_config(page_title="FlashNews: Database Management", layout="wide", page_icon="📊")
-
-# Halaman ini terbuka untuk pengguna umum -- tidak perlu login.
-# Panel admin (hapus data) di bagian bawah halaman ini tetap tergerbang
-# terpisah lewat pengecekan role admin (lihat bagian "PANEL ADMINISTRATOR").
-render_auth_sidebar()
 
 try:
     with open("app/assets/style.css") as f:
@@ -23,8 +17,27 @@ try:
 except FileNotFoundError:
     pass
 
-st.title("📊 FlashNews: Database Management Dashboard")
-st.write("Panel Administrator untuk melihat, menganalisis, dan mengelola basis data berita yang tersimpan.")
+with st.sidebar:
+    st.markdown("### ⚡ NewsAnalytics AI")
+    st.markdown("---")
+    st.page_link("streamlit_app.py", label="Home Dashboard", icon="🏠")
+    st.page_link("pages/1_Scraping.py", label="News Insight", icon="📥")
+    st.page_link("pages/2_Dashboard.py", label="Analytics & Metrics", icon="📊")
+    st.page_link("pages/3_Fenomena.py", label="Fenomena (5-Why)", icon="🔍")
+    st.markdown("---")
+    st.markdown("### ℹ️ Informasi")
+    st.caption("Analytic and Database Management.")
+
+# Konfigurasi Halaman dengan layout wide
+st.set_page_config(page_title="FlashNews: Database Management", layout="wide", page_icon="📊")
+
+# Render autentikasi sidebar
+render_auth_sidebar()
+
+# Header Halaman Utama
+st.markdown("# 📊 FlashNews: Database Management Dashboard")
+st.markdown("Panel Administrator untuk melihat, menganalisis, dan mengelola basis data berita yang tersimpan.")
+st.markdown("---")
 
 # Variabel penentu apakah panel admin (manajemen destruktif) ditampilkan
 is_admin = st.session_state.get("role") == "admin"
@@ -46,27 +59,30 @@ if df_raw.empty:
     st.warning("Basis data kosong. Belum ada data berita yang tersimpan di sistem.")
     st.stop()
 
-# NOTE: db_service.get_latest_scraped_data() me-rename kolom mentah Supabase
-# ("keyword", "sentiment", dst) menjadi "kata_kunci", "Sentimen", dst.
-# Fallback disediakan agar dashboard tetap jalan walau mapping berubah.
 col_keyword = "kata_kunci" if "kata_kunci" in df_raw.columns else "keyword"
 col_media = "media" if "media" in df_raw.columns else "source"
 col_content = "isi_konten" if "isi_konten" in df_raw.columns else "content"
 col_title = "judul" if "judul" in df_raw.columns else "title"
 col_sentiment = "Sentimen" if "Sentimen" in df_raw.columns else ("sentiment" if "sentiment" in df_raw.columns else None)
 
-with st.sidebar:
-    st.markdown("---")
-    st.title("🎛️ Control Panel Data")
-    
+# UI/UX Pembaruan: Peningkatan Kontrol Panel Filter Horizontal di Bagian Atas
+st.markdown('<div class="horizontal-filter-bar">', unsafe_allow_html=True)
+st.markdown("#### ⚙️ Control Panel Data (Filter Global)")
+f_col1, f_col2, f_col3 = st.columns(3)
+
+with f_col1:
     available_options = list(df_raw[col_keyword].dropna().unique()) if col_keyword in df_raw.columns else []
     selected_keyword = st.multiselect("Filter Keyword", options=available_options, default=None)
-    
+
+with f_col2:
     opsi_sentimen = list(df_raw[col_sentiment].dropna().unique()) if col_sentiment else ["POSITIVE", "NEGATIVE", "NEUTRAL"]
     selected_sentimen = st.multiselect("Filter Sentimen", options=opsi_sentimen, default=opsi_sentimen)
-    
+
+with f_col3:
     opsi_media = list(df_raw[col_media].dropna().unique()) if col_media in df_raw.columns else []
     selected_media = st.multiselect("Filter Media", options=opsi_media, default=None)
+
+st.markdown('</div>', unsafe_allow_html=True)
 
 filtered_df = df_raw.copy()
 if selected_keyword:
@@ -76,7 +92,8 @@ if selected_media:
 if col_sentiment and selected_sentimen:
     filtered_df = filtered_df[filtered_df[col_sentiment].isin(selected_sentimen)]
 
-st.markdown("## Insights Utama")
+# Insights Utama & Metrik
+st.markdown("## 📈 Insights Utama")
 if filtered_df.empty:
     st.info("💡 Tidak ada data yang sesuai dengan kriteria filter Anda.")
 else:
@@ -108,7 +125,8 @@ else:
         st.write(f"- {insight}")
     st.divider()
 
-st.markdown("### Grafik Analitik")
+# Grafik Analitik Berdampingan
+st.markdown("### 📊 Grafik Analitik")
 col_chart1, col_chart2 = st.columns(2)
 with col_chart1:
     if col_sentiment and col_sentiment in filtered_df.columns:
@@ -121,7 +139,7 @@ with col_chart2:
         fig_bar = px.bar(top_media_chart.head(10), x='Media', y='Jumlah', title="Top 10 Portal Media", color='Jumlah')
         st.plotly_chart(fig_bar, use_container_width=True)
 
-st.markdown("### Daftar Berita Tersimpan")
+st.markdown("### 📋 Daftar Berita Tersimpan")
 @st.dialog("Detail Berita", width="large")
 def show_news_detail(row):
     st.subheader(row[col_title])
