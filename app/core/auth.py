@@ -1,4 +1,5 @@
 import streamlit as st
+from app.core.config import Config
 
 def init_auth_session():
     """Inisialisasi variabel session login saat aplikasi pertama kali dimuat."""
@@ -31,20 +32,33 @@ def require_login():
 
 
 def render_login_form():
-    """Merender form login di sidebar atau halaman utama."""
+    """Merender form login di sidebar atau halaman utama.
+
+    Kredensial dibaca dari Config (bersumber dari st.secrets), TIDAK PERNAH
+    hardcoded di kode. Jika sebuah role belum punya password dikonfigurasi,
+    login untuk role tersebut dinonaktifkan (fail-closed) alih-alih diam-diam
+    memakai password default yang mudah ditebak.
+    """
     st.sidebar.subheader("🔒 Masuk ke Sistem")
+
+    if not Config.ADMIN_PASSWORD and not Config.USER_PASSWORD:
+        st.sidebar.error(
+            "⚠️ Belum ada kredensial yang dikonfigurasi. Set ADMIN_PASSWORD "
+            "dan/atau USER_PASSWORD di st.secrets sebelum aplikasi bisa dipakai."
+        )
+        return
+
     username = st.sidebar.text_input("Username", key="login_user")
     password = st.sidebar.text_input("Password", type="password", key="login_pass")
-    
+
     if st.sidebar.button("Login"):
-        # Hubungkan ke database users Anda, di bawah ini adalah simulasi hardcoded yang aman
-        if username == "admin" and password == "admin123":
+        if Config.ADMIN_PASSWORD and username == Config.ADMIN_USERNAME and password == Config.ADMIN_PASSWORD:
             st.session_state.authenticated = True
             st.session_state.role = "admin"
             st.session_state.username = username
             st.sidebar.success("Login Admin Berhasil!")
             st.rerun()
-        elif username == "user" and password == "user123":
+        elif Config.USER_PASSWORD and username == Config.USER_USERNAME and password == Config.USER_PASSWORD:
             st.session_state.authenticated = True
             st.session_state.role = "user"
             st.session_state.username = username
