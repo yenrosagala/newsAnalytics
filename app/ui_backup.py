@@ -202,7 +202,7 @@ def render_app():
             """, unsafe_allow_html=True)
         keyword = st.text_input("🔍 Keyword Pencarian Baru", placeholder="Contoh: Inflasi Papua")
 
-        if st.button("🔥 Jalankan Scraping", use_container_width=True, type="primary"):
+        if st.button("🔥 Jalankan Scraping", width='stretch', type="primary"):
             if not keyword.strip():
                 st.warning("Masukkan keyword terlebih dahulu.")
             else:
@@ -274,8 +274,8 @@ def render_app():
                 st.warning("⚠️ Tindakan ini menghapus semua data!")
                 with st.form("delete_form", clear_on_submit=True):
                     password_konfirmasi = st.text_input("Password Admin:", type="password")
-                    # Ganti width='stretch' menjadi use_container_width=True
-                    submit_btn = st.form_submit_button("Konfirmasi Hapus Data", type="primary", use_container_width=True)
+                    # Ganti width='stretch' menjadi width='stretch'
+                    submit_btn = st.form_submit_button("Konfirmasi Hapus Data", type="primary", width='stretch')
                     
                     if submit_btn:
                         password_login = st.session_state.get("saved_db_password", "")
@@ -289,8 +289,8 @@ def render_app():
                             st.error("❌ Password salah.")
        
         st.markdown("---")
-        # Ganti width='stretch' menjadi use_container_width=True
-        if st.button("🚪 Logout", use_container_width=True, type="secondary"):
+        # Ganti width='stretch' menjadi width='stretch'
+        if st.button("🚪 Logout", width='stretch', type="secondary"):
             if "active_keyword" in st.session_state:
                 del st.session_state.active_keyword
             logout()
@@ -489,7 +489,7 @@ def render_app():
                                     data=bytes(pdf_bytes),
                                     file_name=f"Laporan_Analisis_{target_keyword}_{datetime.now().strftime('%Y%m%d')}.pdf",
                                     mime="application/pdf",
-                                    use_container_width=True # Ganti width='stretch' menjadi use_container_width
+                                    width='stretch' # Ganti width='stretch' menjadi use_container_width
                                 )
                         except Exception as pdf_err:
                             st.error(f"Sistem gagal menyiapkan cetakan PDF: {pdf_err}")
@@ -706,8 +706,8 @@ def render_app():
                     hole=0.5
                 )
                 fig_sentimen = set_transparent_layout(fig_sentimen, "Distribusi Sentimen")
-                # Ganti width='stretch' menjadi use_container_width=True
-                st.plotly_chart(fig_sentimen, use_container_width=True)
+                # Ganti width='stretch' menjadi width='stretch'
+                st.plotly_chart(fig_sentimen, width='stretch')
 
             with col2:
                 top_10_m = filtered_df["media"].value_counts().head(10).reset_index()
@@ -725,8 +725,8 @@ def render_app():
                 fig_media.update_yaxes(showgrid=False) 
                 fig_media.update_xaxes(showgrid=False)
                 
-                # Ganti width='stretch' menjadi use_container_width=True
-                st.plotly_chart(fig_media, use_container_width=True)
+                # Ganti width='stretch' menjadi width='stretch'
+                st.plotly_chart(fig_media, width='stretch')
         else:
             st.info("Tidak ada data untuk grafik.")
 
@@ -735,8 +735,8 @@ def render_app():
         if len(filtered_df) > 0:
             display_df = filtered_df[["kata_kunci", "judul", "media", "waktu_tampilan", "Sentimen", "isi_konten"]].copy()
             display_df["waktu_tampilan"] = pd.to_datetime(display_df["waktu_tampilan"]).dt.strftime("%d %b %Y, %H:%M")
-            # Ganti width='stretch' menjadi use_container_width=True
-            selected_rows = st.dataframe(display_df, use_container_width=True, hide_index=True, height=500, selection_mode="single-row", on_select="rerun")
+            # Ganti width='stretch' menjadi width='stretch'
+            selected_rows = st.dataframe(display_df, width='stretch', hide_index=True, height=500, selection_mode="single-row", on_select="rerun")
             
             selected_row_index = selected_rows["selection"]["rows"]
             if selected_row_index:

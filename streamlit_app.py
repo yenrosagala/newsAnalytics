@@ -44,7 +44,7 @@ with col1:
         <p style="color: #94a3b8; font-size: 0.9rem;">Ambil data berita terkini secara real-time dan kelola ringkasan eksekutif tersimpan melalui tabel terstruktur.</p>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Buka Scraping Hub", key="btn_scraping", use_container_width=True, type="primary"):
+    if st.button("Buka Scraping Hub", key="btn_scraping", width='stretch', type="primary"):
         st.switch_page("pages/1_Scraping.py")
 
 with col2:
@@ -54,7 +54,7 @@ with col2:
         <p style="color: #94a3b8; font-size: 0.9rem;">Visualisasi data mendalam dengan filter horizontal di bagian atas untuk ruang kerja grafik yang lebih luas.</p>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Buka Dashboard", key="btn_dashboard", use_container_width=True, type="primary"):
+    if st.button("Buka Dashboard", key="btn_dashboard", width='stretch', type="primary"):
         st.switch_page("pages/2_Dashboard.py")
 
 with col3:
@@ -64,5 +64,5 @@ with col3:
         <p style="color: #94a3b8; font-size: 0.9rem;">Analisis akar masalah secara rekursif mendalam dilengkapi panduan visual interaktif pada area kosong.</p>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Buka Fenomena Analysis", key="btn_fenomena", use_container_width=True, type="primary"):
+    if st.button("Buka Fenomena Analysis", key="btn_fenomena", width='stretch', type="primary"):
         st.switch_page("pages/3_Fenomena.py")

@@ -121,7 +121,7 @@ with tab_recursive:
             key="input_query_tab1"
         )
         depth = st.slider("Kedalaman Analisis (Recursive Level)", 3, 7, 5, key="slider_depth_analysis")
-        run_analysis = st.button("🚀 Jalankan Recursive 5 Why Analysis", type="primary", key="btn_run_recursive", use_container_width=True)
+        run_analysis = st.button("🚀 Jalankan Recursive 5 Why Analysis", type="primary", key="btn_run_recursive", width='stretch')
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown("---")
@@ -252,7 +252,7 @@ with tab_pdf_recursive:
             f"Total sumber pustaka: {len(stored_bibliography)}"
         )
 
-        if st.button("📥 Proses File PDF Recursive", type="primary", key="btn_gen_pdf_recursive", use_container_width=True):
+        if st.button("📥 Proses File PDF Recursive", type="primary", key="btn_gen_pdf_recursive", width='stretch'):
             with st.spinner("Menyiapkan dokumen PDF laporan eksekutif lengkap..."):
                 try:
                     pdf_bytes = report_service.generate_recursive_pdf(
@@ -270,7 +270,7 @@ with tab_pdf_recursive:
                             data=pdf_bytes,
                             file_name=f"Laporan_RootCause_5Why_{stored_query.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
                             mime="application/pdf",
-                            use_container_width=True
+                            width='stretch'
                         )
                 except Exception as pdf_err:
                     st.error(f"Gagal memproses file PDF: {pdf_err}")

@@ -10,5 +10,5 @@ def render_data_table(df: pd.DataFrame) -> None:
             "waktu_tampilan": st.column_config.DateColumn("Tanggal"),
             "judul": st.column_config.TextColumn("Judul Berita", width="large")
         },
-        use_container_width=True
+        width='stretch'
     )

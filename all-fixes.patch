@@ -246,7 +246,7 @@ index da89931..dea8cc1 100644
 +        with st.container(border=True):
 +            st.markdown(f"### {item['icon']} {item['title']}")
 +            st.caption(item["desc"])
-+            st.page_link(item["page"], label=f"Buka {item['title']}", icon="➡️", use_container_width=True)
++            st.page_link(item["page"], label=f"Buka {item['title']}", icon="➡️", width='stretch')
 +
 +st.divider()
 +st.info("💡 Anda juga bisa berpindah halaman kapan saja lewat menu navigasi di *sidebar* sebelah kiri.")

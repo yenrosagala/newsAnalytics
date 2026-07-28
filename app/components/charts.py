@@ -12,8 +12,8 @@ def render_charts(df: pd.DataFrame) -> None:
     
     # Contoh chart: Distribusi Sentimen
     fig = px.pie(df, names="Sentimen", title="Distribusi Sentimen Berita")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     # Contoh chart: Tren Berita per Media
     fig_bar = px.bar(df, x="media", title="Jumlah Berita per Media")
-    st.plotly_chart(fig_bar, use_container_width=True)
+    st.plotly_chart(fig_bar, width='stretch')

@@ -66,7 +66,7 @@ with st.container():
         with col_b:
             sentiment_filter = st.selectbox("Filter Sentimen (Opsional Tampilan)", ["Semua", "Positif", "Netral", "Negatif"])
             
-        submit_scraping = st.form_submit_button("🚀 Jalankan Scraping & Generate Summary", use_container_width=True, type="primary")
+        submit_scraping = st.form_submit_button("🚀 Jalankan Scraping & Generate Summary", width='stretch', type="primary")
     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -196,7 +196,7 @@ if active_keyword_to_summarize:
                 data=bytes(pdf_data),
                 file_name=f"Laporan_Executive_Summary_{active_keyword_to_summarize.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
                 mime="application/pdf",
-                use_container_width=True
+                width='stretch'
             )
         else:
             st.error(err_msg)
@@ -221,7 +221,7 @@ if not df_latest.empty:
                 st.markdown(f"**Status Dokumen:** Siap Diunduh")
                 st.markdown(f"**Total Artikel Terkumpul:** {total_art} entri")
             with col_info2:
-                if st.button(f"📥 Unduh PDF", key=f"btn_dl_{kw.replace(' ', '_')}", use_container_width=True):
+                if st.button(f"📥 Unduh PDF", key=f"btn_dl_{kw.replace(' ', '_')}", width='stretch'):
                     with st.spinner(f"Memproses file PDF untuk '{kw}'..."):
                         pdf_data, err_msg = process_and_get_pdf(kw)
                         if pdf_data:
@@ -231,7 +231,7 @@ if not df_latest.empty:
                                 file_name=f"Laporan_Executive_Summary_{kw.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
                                 mime="application/pdf",
                                 key=f"dl_action_{kw.replace(' ', '_')}",
-                                use_container_width=True
+                                width='stretch'
                             )
                         else:
                             st.error(err_msg)

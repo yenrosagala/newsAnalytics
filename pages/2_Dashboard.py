@@ -131,13 +131,13 @@ col_chart1, col_chart2 = st.columns(2)
 with col_chart1:
     if col_sentiment and col_sentiment in filtered_df.columns:
         fig_pie = px.pie(filtered_df, names=col_sentiment, title="Distribusi Sentimen Berita", hole=0.4)
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, width='stretch')
 with col_chart2:
     if col_media in filtered_df.columns:
         top_media_chart = filtered_df[col_media].value_counts().reset_index()
         top_media_chart.columns = ['Media', 'Jumlah']
         fig_bar = px.bar(top_media_chart.head(10), x='Media', y='Jumlah', title="Top 10 Portal Media", color='Jumlah')
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar, width='stretch')
 
 st.markdown("### 📋 Daftar Berita Tersimpan")
 @st.dialog("Detail Berita", width="large")
@@ -149,7 +149,7 @@ def show_news_detail(row):
     if st.button("Tutup"):
         st.rerun()
 
-event = st.dataframe(filtered_df, use_container_width=True, selection_mode="single-row", on_select="rerun", key="data_editor")
+event = st.dataframe(filtered_df, width='stretch', selection_mode="single-row", on_select="rerun", key="data_editor")
 
 if is_admin:
     selection = st.session_state.get("data_editor", None)
@@ -169,7 +169,7 @@ if is_admin:
     target_date = st.date_input("Pilih Tanggal Target", key="date_hapus_massal")
     admin_password = st.text_input("PostgreSQL Admin Password", type="password", key="pg_admin_password")
 
-    if st.button("🚨 EKSEKUSI HAPUS MASAL TANGGAL INI", type="primary", use_container_width=True):
+    if st.button("🚨 EKSEKUSI HAPUS MASAL TANGGAL INI", type="primary", width='stretch'):
         deleted = db_service.delete_articles_by_date(date_str=target_date.strftime("%Y-%m-%d"), admin_password=admin_password)
         if deleted:
             st.success(f"Berhasil menghapus {deleted} artikel pada tanggal {target_date}.")

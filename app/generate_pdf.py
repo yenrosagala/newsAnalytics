@@ -4,6 +4,16 @@ from fpdf import FPDF
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+
+def clean_text(text):
+    """Fungsi helper untuk membersihkan karakter non-ASCII/Unicode yang tidak didukung Helvetica"""
+    if not isinstance(text, str):
+        return str(text)
+    # Ganti tanda kutip miring/unik dengan tanda kutip biasa, lalu hapus karakter non-ASCII lainnya
+    text = text.replace("“", '"').replace("”", '"').replace("‘", "'").replace("’", "'")
+    return text.encode('ascii', 'ignore').decode('ascii')
+
+
 def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t_media_str, summary_text):
     """
     Fungsi utilitas murni untuk membuat file PDF berdasarkan data yang dikirim dari UI.
@@ -82,6 +92,7 @@ def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t
     # MENAMPILKAN JUDUL UTAMA ANALISIS HASIL AI SECARA DINAMIS
     clean_keyword_title = target_keyword.replace("Judul Analisis", "").replace("**", "").replace(":", "").strip()
     clean_keyword_title = clean_keyword_title.replace("•", "-").replace("·", "-")
+    clean_keyword_title = clean_text(clean_keyword_title)
     
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(40, 40, 40)
@@ -107,12 +118,12 @@ def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t
     pdf.set_font("Helvetica", "B", 10.5)
     pdf.cell(40, 6, "Rentang Waktu", border=0)
     pdf.set_font("Helvetica", "", 10.5)
-    pdf.cell(130, 6, f": {date_range_str}", border=0, new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(130, 6, f": {clean_text(date_range_str)}", border=0, new_x="LMARGIN", new_y="NEXT")
     
     pdf.set_font("Helvetica", "B", 10.5)
     pdf.cell(40, 6, "Top Media", border=0)
     pdf.set_font("Helvetica", "", 10.5)
-    pdf.multi_cell(130, 6, f": {t_media_str}", border=0, new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(130, 6, f": {clean_text(t_media_str)}", border=0, new_x="LMARGIN", new_y="NEXT")
     pdf.ln(8)
 
     # Garis Pembatas Utama
@@ -143,7 +154,7 @@ def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t
     pdf.set_text_color(50, 50, 50)
     pdf.ln(2)
     for insight in insights[:-1]:
-        clean_insight = insight.encode('ascii', 'ignore').decode('ascii').strip()
+        clean_insight = clean_text(insight)
         clean_insight = clean_insight.replace("•", "-").replace("·", "-")
         pdf.multi_cell(170, 6, f"  - {clean_insight}", new_x="LMARGIN", new_y="NEXT", align="JUSTIFY")
     pdf.ln(6)
@@ -157,7 +168,8 @@ def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t
     pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(40, 40, 40)
     
-    clean_body = parsed_body.replace("**", "").encode('ascii', 'ignore').decode('ascii')
+    clean_body = parsed_body.replace("**", "")
+    clean_body = clean_text(clean_body)
     clean_body = clean_body.replace("•", "-").replace("·", "-")
     paragraf_list = [p.strip() for p in clean_body.split("\n") if p.strip()]
     
@@ -178,7 +190,8 @@ def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(50, 50, 50)
         
-        clean_refs = parsed_references.replace("**", "").encode('ascii', 'ignore').decode('ascii')
+        clean_refs = parsed_references.replace("**", "")
+        clean_refs = clean_text(clean_refs)
         clean_refs = clean_refs.replace("•", "-").replace("·", "-")
         ref_lines = [r.strip() for r in clean_refs.split("\n") if r.strip()]
         
