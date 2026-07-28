@@ -11,6 +11,8 @@ class AIService:
         self.active_index = 0
         
         # Daftar model yang akan di-rotate secara berurutan jika model utama habis kuota / error
+        self.active_model_index = 0
+
         self.models_list = [
         "gemini-2.5-flash",
         "gemini-3-flash",
@@ -18,7 +20,7 @@ class AIService:
         "gemini-3.5-flash",
         "gemini-3.5-flash-lite"
         ]
-        self.active_model_index = 0
+        
         self.model_name = self.models_list[self.active_model_index]
         
         # 2. Ambil data mentah dari secrets (dukungan list atau string koma)
@@ -67,6 +69,14 @@ class AIService:
         self._init_client()
         logger.warning(f"🔄 Rotasi API Key! Beralih ke index {self.active_index}")
         return True
+
+    def rotate_key_for_level(self, level_depth: int):
+        """Menggeser API Key secara otomatis berdasarkan level rekursif (1, 2, 3, dst)."""
+        if not self.api_keys:
+            return
+        self.active_index = (level_depth - 1) % len(self.api_keys)
+        self._init_client()
+        logger.info(f"🔄 [Level {level_depth}] Rotasi otomatis ke API Key index ke-{self.active_index}")
 
     def rotate_model(self) -> bool:
         """Menggeser ke model AI cadangan berikutnya jika model saat ini habis kuota"""
