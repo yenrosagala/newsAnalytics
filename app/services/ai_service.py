@@ -5,12 +5,6 @@ from app.core.logger import get_logger
 
 logger = get_logger("AIService")
 
-import streamlit as st
-from google import genai
-from app.core.logger import get_logger
-
-logger = get_logger("AIService")
-
 class AIService:
     def __init__(self):
         # 1. Ambil data mentah dari secrets
