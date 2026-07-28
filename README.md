@@ -25,8 +25,8 @@ A comprehensive Streamlit application for scraping Google News, performing senti
 
 1. Clone the repository
    ```bash
-   git clone https://github.com/yenrosagala/Google_News_Scrapping.git
-   cd Google_News_Scrapping
+   git clone https://github.com/yenrosagala/newsAnalytics.git
+   cd newsAnalytic
    ```
 
 2. Create and activate virtual environment
