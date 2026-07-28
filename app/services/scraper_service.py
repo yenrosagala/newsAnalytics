@@ -8,7 +8,6 @@ from app.services.ai_service import ai_service
 from app.services.sentiment_service import sentiment_service
 from app.services.database_service import db_service
 from urllib.parse import urlparse
-from newspaper import Article
 
 try:
     from googlenewsdecoder import gnewsdecoder

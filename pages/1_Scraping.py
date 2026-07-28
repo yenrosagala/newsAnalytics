@@ -8,7 +8,7 @@ from app.core.config import Config
 from app.core.logger import setup_logger
 from app.generate_pdf import generate_pdf_report
 from app.prompts.executive_summary import get_executive_summary_prompt
-from app.core.auth import require_login
+from app.core.auth import render_auth_sidebar
 
 # Inisialisasi konfigurasi
 config = Config()
@@ -16,8 +16,9 @@ logger = setup_logger("page_scraping")
 
 st.set_page_config(page_title="FlashNews: News Scraper", layout="wide", page_icon="📰")
 
-# --- PROTEKSI HALAMAN ---
-require_login()
+# Halaman ini terbuka untuk pengguna umum -- tidak perlu login.
+# Widget di bawah hanya menampilkan status/opsi login admin di sidebar.
+render_auth_sidebar()
 
 try:
     with open("app/assets/style.css") as f:
@@ -28,13 +29,8 @@ except FileNotFoundError:
 st.title("📰 News Scraper & Executive Summary Hub")
 st.subheader("Scraping Berita & Analisis Sentimen Otomatis")
 
-# Sidebar untuk informasi sesi
-st.sidebar.header("🔑 Status Pengguna")
+# is_admin dipakai di beberapa tempat lain di halaman ini untuk fitur khusus admin
 is_admin = st.session_state.get("role") == "admin"
-if is_admin:
-    st.sidebar.success("Masuk sebagai: **Admin**\n\n*(Ganti akun via Homepage)*")
-else:
-    st.sidebar.info("Masuk sebagai: **General User**\n\n*(Ganti akun via Homepage)*")
 
 # --- BAGIAN UTAMA: SCRAPING BERITA & OTOMATIS PROSES SUMMARY ---
 with st.form("scraping_form"):

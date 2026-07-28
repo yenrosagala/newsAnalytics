@@ -94,6 +94,68 @@ def _articles_to_bibliography(articles: List[Dict]) -> List[Dict]:
     ]
 
 
+def consolidate_bibliography(result_tree: List[Dict]) -> List[Dict]:
+    """Menggabungkan daftar pustaka SEMUA level menjadi satu daftar bernomor global.
+
+    - Deduplikasi berdasarkan URL (kalau artikel yang sama muncul lagi di
+      level lain, nomornya tidak diulang -- tapi level asalnya dicatat di
+      `levels` supaya tetap tertelusur ia relevan di level mana saja).
+    - Penomoran mengikuti urutan kemunculan pertama (Level 1 duluan, dst),
+      dan nomor ini adalah yang WAJIB dipakai AI saat sitasi di ringkasan
+      eksekutif (lihat get_recursive_executive_summary_prompt).
+    """
+    consolidated: List[Dict] = []
+    seen_urls: Dict[str, int] = {}  # url -> index di `consolidated`
+
+    for lvl in result_tree:
+        depth = lvl.get("depth")
+        for bib in lvl.get("bibliography", []):
+            url = bib.get("url") or "#"
+            key = url if url != "#" else f"{bib.get('title')}|{bib.get('media')}"
+            if key in seen_urls:
+                idx = seen_urls[key]
+                if depth not in consolidated[idx]["levels"]:
+                    consolidated[idx]["levels"].append(depth)
+                continue
+            entry = dict(bib)
+            entry["levels"] = [depth]
+            seen_urls[key] = len(consolidated)
+            consolidated.append(entry)
+
+    for i, entry in enumerate(consolidated, 1):
+        entry["number"] = i
+
+    return consolidated
+
+
+def format_bibliography_for_prompt(consolidated_bibliography: List[Dict]) -> str:
+    """Format daftar pustaka konsolidasi jadi teks bernomor untuk dikirim ke AI."""
+    lines = []
+    for entry in consolidated_bibliography:
+        levels_str = ", ".join(f"L{d}" for d in entry.get("levels", []))
+        lines.append(
+            f"[{entry['number']}] {entry.get('author', 'Tidak diketahui')}. "
+            f"{entry.get('media', '-')}. {entry.get('date', '-')}. "
+            f"{entry.get('title', 'Tanpa Judul')}. (Ditemukan di: {levels_str})"
+        )
+    return "\n".join(lines) if lines else "Tidak ada sumber."
+
+
+def format_level_breakdown_for_prompt(result_tree: List[Dict]) -> str:
+    """Format ringkasan + penyebab tiap level jadi teks untuk dikirim ke AI."""
+    parts = []
+    for lvl in result_tree:
+        parts.append(f"--- LEVEL {lvl['depth']} (Query: {', '.join(lvl['queries_used'])}) ---")
+        parts.append(f"Ringkasan: {lvl.get('summary', '-')}")
+        causes = lvl.get("causes_extracted") or []
+        if causes:
+            parts.append("Penyebab teridentifikasi di level ini:")
+            for c in causes:
+                parts.append(f"- {c}")
+        parts.append("")
+    return "\n".join(parts)
+
+
 async def run_recursive_5why_pipeline_with_progress(
     initial_query: str,
     max_depth: int = 5,
@@ -131,11 +193,8 @@ async def run_recursive_5why_pipeline_with_progress(
         if ai_service.client:
             try:
                 prompt = _build_analysis_prompt(current_queries, depth, all_articles)
-                response = ai_service.client.models.generate_content(
-                    model=ai_service.model_name,
-                    contents=prompt,
-                )
-                ai_parsed = _parse_ai_json(response.text)
+                raw_response_text = ai_service.generate(prompt)
+                ai_parsed = _parse_ai_json(raw_response_text)
             except Exception as e:
                 logger.error(f"Level {depth}: gagal memanggil AI service: {e}")
         else:

@@ -5,7 +5,6 @@ import streamlit as st
 from supabase import create_client, Client
 from app.core.logger import get_logger
 from app.core.config import Config
-from datetime import datetime, date
 
 logger = get_logger("DatabaseService")
 
@@ -57,16 +56,6 @@ class DatabaseService:
             logger.error(f"Error fetching data: {e}")
             return pd.DataFrame()
 
-    def make_json_serializable(self, data):
-        """Fungsi helper untuk membersihkan objek datetime/date agar JSON serializable."""
-        if isinstance(data, list):
-            return [self.make_json_serializable(item) for item in data]
-        elif isinstance(data, dict):
-            return {key: self.make_json_serializable(val) for key, val in data.items()}
-        elif isinstance(data, (datetime, date)):
-            return data.isoformat()
-        return data
-
     def save_articles(self, articles: list) -> int:
         """Menyimpan/Upsert artikel dengan proteksi UUID."""
         if not articles:
@@ -91,6 +80,8 @@ class DatabaseService:
             return 0
 
         try:
+            # Password admin hanya dipakai untuk otorisasi level-aplikasi.
+            # Koneksi ke Supabase tetap memakai kredensial default yang sudah dikonfigurasi.
             client = self._get_client()
             start_dt = f"{date_str}T00:00:00"
             end_dt = f"{date_str}T23:59:59"
@@ -148,18 +139,13 @@ class DatabaseService:
     # ------------------------------------------------------------------
     def save_root_cause_analysis(self, initial_query: str, result_tree: list, executive_summary: str) -> bool:
         """Menyimpan hasil analisis 5-Why bertingkat ke database sebagai riwayat."""
-        clean_result_tree = self.make_json_serializable(result_tree)
-
-        data_payload = {
-            "initial_query": initial_query,
-            "result_tree": clean_result_tree,
-            "executive_summary": executive_summary,
-            "created_at": datetime.now().isoformat()
-        }
-
         try:
             client = self._get_client()
-            client.table("root_cause_analysis").insert(data_payload).execute()
+            client.table("root_cause_analysis").insert({
+                "initial_query": initial_query,
+                "result_tree": json.dumps(result_tree, ensure_ascii=False),
+                "executive_summary": executive_summary,
+            }).execute()
             return True
         except Exception as e:
             logger.error(f"Gagal menyimpan root cause analysis (cek tabel 'root_cause_analysis'): {e}")
@@ -168,12 +154,24 @@ class DatabaseService:
     def _prepare_article_row(self, art: dict) -> dict:
         """Helper untuk normalisasi format data sebelum masuk DB."""
         url = art.get("url") or art.get("link", "")
+        existing_id = art.get("id")
+        if existing_id:
+            row_id = str(existing_id)
+        elif url:
+            row_id = str(uuid.uuid5(uuid.NAMESPACE_URL, url))
+        else:
+            row_id = str(uuid.uuid4())
+
+        published_date = art.get("published_date") or art.get("waktu_tampilan")
+        if hasattr(published_date, "isoformat"):
+            published_date = published_date.isoformat()
+
         return {
-            "id": art.get("id") or str(uuid.uuid5(uuid.NAMESPACE_URL, url)) if url else str(uuid.uuid4()),
+            "id": row_id,
             "title": art.get("title") or art.get("judul"),
             "url": url,
             "source": art.get("source") or art.get("media"),
-            "published_date": str(art.get("published_date") or art.get("waktu_tampilan")),
+            "published_date": str(published_date) if published_date else None,
             "content": art.get("content") or art.get("isi_konten"),
             "sentiment": str(art.get("sentiment", art.get("Sentimen", "NEUTRAL"))).upper(),
             "keyword": art.get("keyword") or art.get("kata_kunci")

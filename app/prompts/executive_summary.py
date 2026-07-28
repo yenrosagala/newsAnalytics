@@ -85,3 +85,52 @@ def get_executive_summary_prompt(data_context: str, display_title_keyword: str, 
     {concatenated_content}
     {catatan_regenerate}
     """
+
+
+def get_recursive_executive_summary_prompt(
+    initial_query: str,
+    level_breakdown: str,
+    numbered_bibliography: str,
+) -> str:
+    """Prompt untuk laporan Root Cause Analysis (5-Why) bertingkat.
+
+    Berbeda dari get_executive_summary_prompt (yang dirancang untuk satu
+    korpus keyword tunggal dan memaksakan konteks institusi/wilayah tetap),
+    prompt ini:
+    - Generik untuk topik APAPUN, tidak hardcode entitas/wilayah tertentu.
+    - Meminta OUTPUT JSON ketat {"title": ..., "executive_summary": ...}
+      supaya judul & isi bisa dipisah secara reliable tanpa parsing string
+      yang rapuh.
+    - Diberi daftar pustaka yang SUDAH DINOMORI SECARA OTORITATIF oleh
+      sistem (bukan oleh AI), dan AI diwajibkan memakai nomor tsb persis
+      saat melakukan sitasi -- supaya [1][2][3] di esai benar-benar cocok
+      dengan Daftar Pustaka final di PDF.
+    """
+    return f"""Anda adalah analis riset senior yang menyusun laporan Root Cause Analysis (metode "5 Why") bertingkat untuk kalangan eksekutif/pengambil kebijakan.
+
+TOPIK/FENOMENA AWAL YANG DITELUSURI:
+{initial_query}
+
+Berikut adalah hasil penelusuran bertingkat (Level 1 = permukaan masalah, Level berikutnya = penyebab yang semakin mendalam):
+{level_breakdown}
+
+Berikut adalah DAFTAR PUSTAKA yang SUDAH DINOMORI SECARA RESMI oleh sistem (gunakan PERSIS nomor-nomor ini saat melakukan sitasi, jangan membuat nomor sendiri):
+{numbered_bibliography}
+
+## Tugas Anda
+
+1. **Judul**: Buat SATU judul laporan yang tajam, spesifik, dan mencerminkan alur sebab-akibat yang ditemukan lintas seluruh level (bukan sekadar mengulang topik awal, bukan generik, bukan clickbait, bukan berupa pertanyaan). Panjang 10-20 kata, bahasa Indonesia formal-analitis.
+
+2. **Ringkasan Eksekutif**: Tulis esai naratif formal (5-9 paragraf) yang mensintesis TEMUAN DARI SELURUH LEVEL menjadi satu narasi akar-masalah yang koheren -- jelaskan bagaimana penyebab di level permukaan mengarah ke penyebab yang lebih dalam di level berikutnya, sampai ke akar masalah yang paling mendasar yang teridentifikasi. Integrasikan unsur 5W+1H secara alami ke dalam paragraf, JANGAN gunakan bullet point atau subjudul yang memecah esai. Tutup dengan implikasi/rekomendasi tingkat tinggi berdasarkan akar masalah yang ditemukan.
+   - WAJIB memakai sitasi numerik [n] pada setiap klaim faktual, sesuai PERSIS nomor di Daftar Pustaka Resmi di atas.
+   - Satu kalimat boleh memiliki lebih dari satu sitasi, misalnya [2][5].
+   - JANGAN mencantumkan ulang daftar pustaka di dalam field ini -- itu akan disusun terpisah oleh sistem.
+   - Gunakan bahasa Indonesia formal, objektif, analitis, dan profesional. Bold pada angka/istilah/kebijakan penting boleh memakai **teks**.
+   - JANGAN mengasumsikan topik ini selalu tentang institusi atau wilayah tertentu -- analisis harus murni mengikuti fakta yang ada di korpus berita di atas, apapun topiknya.
+
+## Format Output (WAJIB)
+Jawab HANYA dengan JSON valid, tanpa markdown code fence, tanpa teks lain di luar JSON, persis struktur berikut:
+{{
+  "title": "...",
+  "executive_summary": "..."
+}}"""

@@ -1,6 +1,19 @@
 from fpdf import FPDF
 import datetime
 import os
+from typing import List, Dict
+
+
+def _sanitize_pdf_text(text: str) -> str:
+    """Bersihkan teks agar aman dirender font core fpdf2 (charset WinAnsi/cp1252),
+    TANPA menghapus karakter tipografi umum (kutip miring "", en/em-dash, elipsis,
+    bullet) seperti pendekatan encode('ascii','ignore') lama yang merusak teks
+    hasil AI (mis. "kata—kata" jadi "katakata").
+    Hanya karakter yang benar-benar di luar cp1252 (mis. emoji, CJK) yang diganti '?'.
+    """
+    if not text:
+        return ""
+    return text.encode("cp1252", "replace").decode("cp1252")
 
 
 class ReportService:
@@ -48,6 +61,201 @@ class ReportService:
             
         pdf.output(output_filename)
         return output_filename
+
+    @staticmethod
+    def generate_recursive_pdf(
+        title: str,
+        executive_summary: str,
+        initial_query: str,
+        result_tree: List[Dict],
+        consolidated_bibliography: List[Dict],
+    ) -> bytes:
+        """Menyusun laporan PDF formal Root Cause Analysis (5-Why) bertingkat.
+
+        Struktur:
+          1. Sampul: judul hasil AI (bukan generik) + metadata topik
+          2. Ringkasan Eksekutif (esai formal dari AI, sitasi [n])
+          3. Analisis Bertingkat: per level -- query, ringkasan, penyebab
+          4. Grafik jumlah artikel per level (data asli, bukan data acak)
+          5. Daftar Pustaka Konsolidasi -- gabungan SEMUA level, bernomor
+             global, masing-masing entri menandai level asalnya
+        """
+        pdf = FPDF(orientation="P", unit="mm", format="A4")
+        pdf.set_margins(left=20, top=20, right=20)
+        pdf.set_auto_page_break(auto=True, margin=20)
+        pdf.add_page()
+
+        S = _sanitize_pdf_text
+
+        # --- SAMPUL ---
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(120, 120, 120)
+        pdf.cell(170, 6, "LAPORAN ROOT CAUSE ANALYSIS (METODE 5-WHY BERTINGKAT)", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+
+        pdf.set_font("Helvetica", "B", 17)
+        pdf.set_text_color(0, 90, 160)
+        pdf.multi_cell(170, 8, S(title.strip() or f"Analisis Akar Masalah: {initial_query}"), align="L", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(1)
+
+        pdf.set_font("Helvetica", "I", 10)
+        pdf.set_text_color(90, 90, 90)
+        pdf.multi_cell(170, 5.5, S(f"Topik awal investigasi: {initial_query}"), new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(120, 120, 120)
+        total_articles = sum(lvl.get("articles_found", 0) for lvl in result_tree)
+        meta_line = (
+            f"Dibuat otomatis: {datetime.datetime.now().strftime('%d %B %Y, %H:%M')}  |  "
+            f"Kedalaman analisis: {len(result_tree)} level  |  "
+            f"Total artikel dianalisis: {total_articles}  |  "
+            f"Total sumber pustaka: {len(consolidated_bibliography)}"
+        )
+        pdf.multi_cell(170, 5, S(meta_line), new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(3)
+
+        pdf.set_draw_color(0, 120, 212)
+        pdf.set_line_width(0.6)
+        pdf.line(20, pdf.get_y(), 190, pdf.get_y())
+        pdf.ln(8)
+
+        # --- RINGKASAN EKSEKUTIF ---
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.set_text_color(0, 100, 180)
+        pdf.cell(170, 8, "Ringkasan Eksekutif", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+
+        pdf.set_font("Helvetica", "", 11)
+        pdf.set_text_color(30, 30, 30)
+        paragraphs = [p.strip() for p in (executive_summary or "").split("\n") if p.strip()]
+        for para in paragraphs:
+            pdf.multi_cell(170, 6.3, S(para), align="J", markdown=True, new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(3)
+
+        pdf.ln(2)
+        pdf.set_draw_color(200, 200, 200)
+        pdf.set_line_width(0.3)
+        pdf.line(20, pdf.get_y(), 190, pdf.get_y())
+        pdf.ln(8)
+
+        # --- ANALISIS BERTINGKAT PER LEVEL ---
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.set_text_color(0, 100, 180)
+        pdf.cell(170, 8, "Analisis Bertingkat per Level (5-Why)", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(3)
+
+        for lvl in result_tree:
+            if pdf.get_y() > 250:
+                pdf.add_page()
+
+            depth = lvl.get("depth")
+            pdf.set_fill_color(235, 244, 252)
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.set_text_color(0, 80, 140)
+            pdf.cell(170, 8, S(f"Level {depth}"), fill=True, new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(1)
+
+            pdf.set_font("Helvetica", "B", 9.5)
+            pdf.set_text_color(80, 80, 80)
+            pdf.cell(35, 5.5, "Query Pencarian", border=0)
+            pdf.set_font("Helvetica", "", 9.5)
+            pdf.multi_cell(135, 5.5, S(", ".join(lvl.get("queries_used", []))), new_x="LMARGIN", new_y="NEXT")
+
+            pdf.set_font("Helvetica", "B", 9.5)
+            pdf.cell(35, 5.5, "Artikel Ditemukan", border=0)
+            pdf.set_font("Helvetica", "", 9.5)
+            pdf.cell(135, 5.5, S(f"{lvl.get('articles_found', 0)} artikel"), new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(1)
+
+            if lvl.get("summary"):
+                pdf.set_font("Helvetica", "B", 9.5)
+                pdf.set_text_color(40, 40, 40)
+                pdf.cell(170, 5.5, "Ringkasan Level:", new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("Helvetica", "", 9.5)
+                pdf.multi_cell(170, 5.3, S(lvl["summary"]), align="J", new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(1)
+
+            causes = lvl.get("causes_extracted") or []
+            if causes:
+                pdf.set_font("Helvetica", "B", 9.5)
+                pdf.set_text_color(180, 40, 40)
+                pdf.cell(170, 5.5, "Penyebab Teridentifikasi (Indikasi):", new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("Helvetica", "", 9.5)
+                pdf.set_text_color(40, 40, 40)
+                for c in causes:
+                    pdf.multi_cell(170, 5.3, S(f"- {c}"), new_x="LMARGIN", new_y="NEXT")
+
+            pdf.ln(5)
+
+        # --- GRAFIK JUMLAH ARTIKEL PER LEVEL (data asli) ---
+        try:
+            import io
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+
+            levels_lbl = [f"L{lvl.get('depth')}" for lvl in result_tree]
+            counts = [lvl.get("articles_found", 0) for lvl in result_tree]
+            if any(counts):
+                fig, ax = plt.subplots(figsize=(6, 2.6))
+                ax.bar(levels_lbl, counts, color="#0078D4")
+                ax.set_title("Jumlah Artikel Dianalisis per Level", fontsize=10, fontweight="bold")
+                ax.set_ylabel("Jumlah Artikel")
+                plt.tight_layout()
+                img_buf = io.BytesIO()
+                plt.savefig(img_buf, format="png", dpi=180)
+                plt.close(fig)
+                img_buf.seek(0)
+
+                if pdf.get_y() > 220:
+                    pdf.add_page()
+                pdf.image(img_buf, x=35, w=140)
+                pdf.ln(6)
+        except Exception:
+            pass  # Grafik bersifat pelengkap; laporan tetap valid tanpa grafik jika gagal
+
+        # --- DAFTAR PUSTAKA KONSOLIDASI ---
+        if pdf.get_y() > 230:
+            pdf.add_page()
+
+        pdf.set_draw_color(200, 200, 200)
+        pdf.line(20, pdf.get_y(), 190, pdf.get_y())
+        pdf.ln(6)
+
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.set_text_color(0, 100, 180)
+        pdf.cell(170, 8, "Daftar Pustaka Konsolidasi (Seluruh Level)", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_font("Helvetica", "I", 8.5)
+        pdf.set_text_color(120, 120, 120)
+        pdf.multi_cell(170, 5, "Memuat gabungan seluruh sumber dari setiap level pencarian; nomor sesuai sitasi [n] pada Ringkasan Eksekutif.", new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(2)
+
+        pdf.set_font("Helvetica", "", 9.5)
+        pdf.set_text_color(40, 40, 40)
+        for entry in consolidated_bibliography:
+            levels_str = ", ".join(f"L{d}" for d in entry.get("levels", []))
+            line = (
+                f"[{entry['number']}] {entry.get('author', 'Tidak diketahui')}. "
+                f"{entry.get('media', '-')}. {entry.get('date', '-')}. "
+                f"{entry.get('title', 'Tanpa Judul')}. {entry.get('url', '')} (Level: {levels_str})"
+            )
+            pdf.multi_cell(170, 5.2, S(line), new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(1)
+
+        # --- FOOTER ---
+        if pdf.get_y() > 250:
+            pdf.add_page()
+        pdf.ln(5)
+        pdf.set_draw_color(200, 200, 200)
+        pdf.line(20, pdf.get_y(), 190, pdf.get_y())
+        pdf.ln(4)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(140, 140, 140)
+        pdf.cell(170, 4, "Laporan ini dihasilkan secara otomatis oleh sistem News Intelligence Dashboard.", align="C", new_x="LMARGIN", new_y="NEXT")
+
+        return bytes(pdf.output())
+
 
 # Inisialisasi Singleton agar nama panggilannya di pages/2_Dashboard.py tetap sama
 report_service = ReportService()

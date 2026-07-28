@@ -3,7 +3,7 @@ from app.core.config import Config
 from app.core.logger import get_logger
 from app.utils.session import init_state
 from app.utils.session import init_session_state
-from app.core.auth import render_login_form, render_logout, is_authenticated
+from app.core.auth import render_auth_sidebar
 
 # 1. Setup Logger
 logger = get_logger("MainApp")
@@ -37,12 +37,8 @@ except FileNotFoundError:
 init_state("search_keyword", "")
 init_state("is_scrapped", False)
 
-# 6. Login / Logout di Sidebar
-if is_authenticated():
-    st.sidebar.success(f"Masuk sebagai: **{st.session_state.get('role', 'user').capitalize()}**")
-    render_logout()
-else:
-    render_login_form()
+# 6. Widget Login Admin di Sidebar (opsional -- publik tidak wajib login)
+render_auth_sidebar()
 
 # 7. Header Halaman Utama
 st.markdown("<div class='main-header'>📰 Google News Scraper & Sentiment Analyzer</div>", unsafe_allow_html=True)
@@ -56,11 +52,7 @@ menganalisis sentimen publik, dan mengekspor hasilnya ke dalam format laporan ya
 st.divider()
 
 # 8. Menu Utama di Halaman Tengah (bukan hanya di sidebar)
-if is_authenticated():
-    st.markdown("#### 🚀 Pilih Menu untuk Memulai")
-else:
-    st.info("🔒 Silakan login terlebih dahulu melalui sidebar di sebelah kiri untuk mengakses menu di bawah ini.")
-    st.markdown("#### 🚀 Menu Aplikasi (login untuk mengakses)")
+st.markdown("#### 🚀 Pilih Menu untuk Memulai")
 
 menu_items = [
     {

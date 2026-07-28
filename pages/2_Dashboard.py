@@ -5,15 +5,17 @@ import plotly.express as px
 from app.services.database_service import db_service
 from app.core.config import Config
 from app.core.logger import setup_logger
-from app.core.auth import require_login
+from app.core.auth import render_auth_sidebar
 
 config = Config()
 logger = setup_logger("page_dashboard")
 
 st.set_page_config(page_title="FlashNews: Database Management", layout="wide", page_icon="📊")
 
-# --- PROTEKSI HALAMAN ---
-require_login()
+# Halaman ini terbuka untuk pengguna umum -- tidak perlu login.
+# Panel admin (hapus data) di bagian bawah halaman ini tetap tergerbang
+# terpisah lewat pengecekan role admin (lihat bagian "PANEL ADMINISTRATOR").
+render_auth_sidebar()
 
 try:
     with open("app/assets/style.css") as f:
@@ -24,13 +26,8 @@ except FileNotFoundError:
 st.title("📊 FlashNews: Database Management Dashboard")
 st.write("Panel Administrator untuk melihat, menganalisis, dan mengelola basis data berita yang tersimpan.")
 
-# Sidebar Status Pengguna
-st.sidebar.header("🔑 Status Pengguna")
+# Variabel penentu apakah panel admin (manajemen destruktif) ditampilkan
 is_admin = st.session_state.get("role") == "admin"
-if is_admin:
-    st.sidebar.success("Masuk sebagai: **Admin**\n\n*(Ganti akun via Homepage)*")
-else:
-    st.sidebar.info("Masuk sebagai: **General User**\n\n*(Ganti akun via Homepage)*")
 
 @st.cache_data(ttl=60)
 def load_dashboard_data():
