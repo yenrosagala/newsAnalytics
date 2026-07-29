@@ -23,9 +23,9 @@ from app.services.scraper_service import scraper_service
 
 logger = get_logger("RecursiveEngine")
 
-ARTICLES_PER_LEVEL = 3
-MAX_ARTICLES_IN_PROMPT = 15
-MAX_CONTENT_CHARS_PER_ARTICLE = 1500
+ARTICLES_PER_LEVEL = 20
+MAX_ARTICLES_IN_PROMPT = 30
+MAX_CONTENT_CHARS_PER_ARTICLE = 15000
 
 
 def _build_analysis_prompt(current_queries: List[str], depth: int, articles: List[Dict]) -> str:
