@@ -139,23 +139,18 @@ def process_and_get_pdf(target_keyword):
             catatan_regenerate=""
         )
         
-        if ai_service.client:
-            try:
-                response = ai_service.client.models.generate_content(
-                    model=ai_service.model_name,
-                    contents=prompt
-                )
-                summary_text_result = response.text
-                
-                db_service.save_executive_summary_to_db(
-                    kata_kunci=target_keyword,
-                    rentang_waktu=date_range_str,
-                    hasil_summary=summary_text_result
-                )
-            except Exception as ai_err:
-                return None, f"Gagal menghasilkan ringkasan via AI: {ai_err}"
-        else:
-            return None, "AI Service / Gemini Client belum terkonfigurasi dengan benar."
+        try:
+            # Pakai ai_service.generate() (bukan ai_service.client.models langsung)
+            # supaya rotasi API key DAN fallback ke Gwen AI tetap berlaku di sini juga.
+            summary_text_result = ai_service.generate(prompt)
+
+            db_service.save_executive_summary_to_db(
+                kata_kunci=target_keyword,
+                rentang_waktu=date_range_str,
+                hasil_summary=summary_text_result
+            )
+        except Exception as ai_err:
+            return None, f"Gagal menghasilkan ringkasan via AI/Gwen: {ai_err}"
             
     insights_list = []
     if "Sentimen" in filtered_data.columns:
