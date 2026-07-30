@@ -141,6 +141,40 @@ def format_bibliography_for_prompt(consolidated_bibliography: List[Dict]) -> str
     return "\n".join(lines) if lines else "Tidak ada sumber."
 
 
+def validate_citation_diversity(executive_summary: str, consolidated_bibliography: List[Dict]) -> str | None:
+    """Deteksi kasus AI mengabaikan instruksi penomoran sitasi (mis. semua
+    sitasi jadi [1] padahal Daftar Pustaka berisi banyak sumber berbeda).
+
+    Ini BUKAN perbaikan otomatis -- tidak mungkin menebak ulang secara benar
+    klaim mana berasal dari sumber mana setelah esai ditulis. Fungsi ini
+    hanya memberi peringatan dini supaya masalah tidak lolos diam-diam ke
+    laporan final.
+
+    Return: pesan warning (str) kalau mencurigakan, atau None kalau aman.
+    """
+    if not executive_summary or len(consolidated_bibliography) <= 1:
+        return None
+
+    nums_found = [int(n) for n in re.findall(r"\[(\d+)\]", executive_summary)]
+    if len(nums_found) < 3:
+        return None  # terlalu sedikit sitasi untuk disimpulkan apa-apa
+
+    distinct = set(nums_found)
+    if len(distinct) == 1:
+        only_num = next(iter(distinct))
+        return (
+            f"⚠️ Semua sitasi pada Ringkasan Eksekutif menunjuk ke nomor yang sama ([{only_num}]), "
+            f"padahal Daftar Pustaka berisi {len(consolidated_bibliography)} sumber berbeda. "
+            "Ini indikasi model AI tidak mengikuti instruksi penomoran sitasi dengan benar -- "
+            "biasanya terjadi kalau korpus yang dikirim ke AI terlalu besar (banyak artikel & panjang "
+            "karakter per artikel), atau saat memakai fallback Gwen AI yang kurang presisi mengikuti "
+            "instruksi format ketat. Pertimbangkan menjalankan ulang analisis, mengurangi "
+            "MAX_ARTICLES_IN_PROMPT / MAX_CONTENT_CHARS_PER_ARTICLE di app/recursive_engine.py, atau "
+            "memverifikasi manual sitasi sebelum laporan dibagikan."
+        )
+    return None
+
+
 def format_level_breakdown_for_prompt(result_tree: List[Dict]) -> str:
     """Format ringkasan + penyebab tiap level jadi teks untuk dikirim ke AI."""
     parts = []
