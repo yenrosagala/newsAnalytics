@@ -100,7 +100,7 @@ def _render_level_details(
     kosong mengambang. Diganti dengan st.container(key=...) yang benar-benar
     membungkus di DOM.
     """
-    is_root_cause = depth == 5
+    is_root_cause = depth == max_depth
 
     with st.container(key=f"level_card_{depth}"):
         if is_root_cause:
