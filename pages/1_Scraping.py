@@ -29,10 +29,10 @@ else:
 with st.sidebar:
     st.markdown("### ⚡ NewsAnalytics AI")
     st.markdown("---")
-    st.page_link("streamlit_app.py", label="Home Dashboard", icon="🏠")
-    st.page_link("pages/1_Scraping.py", label="News Insight", icon="📥")
-    st.page_link("pages/2_Dashboard.py", label="Analytics & Metrics", icon="📊")
-    st.page_link("pages/3_Fenomena.py", label="Fenomena (5-Why)", icon="🔍")
+    st.page_link("streamlit_app.py", label="Home", icon="🏠")
+    st.page_link("pages/1_Scraping.py", label="News Scraper", icon="📥")
+    st.page_link("pages/2_Dashboard.py", label="Analytics Dashboard", icon="📊")
+    st.page_link("pages/3_Fenomena.py", label="Root Cause Analysis", icon="🔍")
     st.markdown("---")
     st.markdown("### ℹ️ Informasi")
     st.caption("Fitur mengeksplorasi berita dan memberikan insight secara menyeluruh.")
@@ -44,7 +44,8 @@ st.set_page_config(page_title="Scraping & Database", layout="wide", page_icon="�
 render_auth_sidebar()
 
 # Header Halaman Utama dengan UI/UX Modern
-st.markdown("# 📥 Google News Scraping & Executive Summary")
+st.markdown("# 📥 News Scraper")
+st.caption("Google News Scraping & Executive Summary")
 st.markdown("Masukkan kata kunci untuk mengambil data berita terbaru dan kelola database executive summary.")
 st.markdown("---")
 
@@ -52,8 +53,7 @@ st.markdown("---")
 is_admin = st.session_state.get("role") == "admin"
 
 # --- BAGIAN UTAMA: FORM PARAMETER SCRAPING BERITA ---
-with st.container():
-    st.markdown('<div class="feature-card">', unsafe_allow_html=True)
+with st.container(key="scraping_form_card"):
     st.subheader("⚙️ Parameter Pencarian Berita")
     st.write("Masukkan topik atau kata kunci berita (Pencarian otomatis difilter dari 1 Januari 2026).")
     
@@ -67,8 +67,6 @@ with st.container():
             sentiment_filter = st.selectbox("Filter Sentimen (Opsional Tampilan)", ["Semua", "Positif", "Netral", "Negatif"])
             
         submit_scraping = st.form_submit_button("🚀 Jalankan Scraping & Generate Summary", width='stretch', type="primary")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
 
 if submit_scraping:
     if not keyword.strip():
