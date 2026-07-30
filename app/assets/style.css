@@ -65,20 +65,45 @@ label[data-testid="stWidgetLabel"] span {
 /* =========================================================
    4. INPUT COMPONENT CONTRAST (Kotak Input & Dropdown)
    ========================================================= */
-input[type="text"], input[type="password"], div[data-baseweb="select"], input[type="number"] {
+input[type="text"], input[type="password"], input[type="number"] {
     background-color: #0B0F19 !important; /* Hitam pekat agar ketikan teks putih terlihat kontras */
     color: #FFFFFF !important;
     border: 1.5px solid #334155 !important;
     border-radius: 8px !important;
 }
 
-input[type="text"]:focus, div[data-baseweb="select"]:focus {
+/* Selectbox / Multiselect -- target wrapper DAN elemen kontrol di dalamnya,
+   karena background asli BaseWeb sering ada di child div, bukan di wrapper
+   [data-baseweb="select"] itu sendiri (itu sebabnya sebelumnya masih putih). */
+div[data-baseweb="select"],
+div[data-baseweb="select"] > div,
+div[data-baseweb="select"] [class*="control"] {
+    background-color: #0B0F19 !important;
+    border-color: #334155 !important;
+}
+
+input[type="text"]:focus, div[data-baseweb="select"]:focus-within {
     border-color: #38BDF8 !important;
 }
 
 div[data-baseweb="select"] span {
     color: #FFFFFF !important; 
     font-weight: 700 !important;
+}
+
+/* Menu dropdown (opsi pilihan) dirender di portal terpisah saat select dibuka --
+   perlu ditarget terpisah supaya tidak tetap putih saat dropdown dibuka. */
+div[data-baseweb="popover"] ul[role="listbox"],
+div[data-baseweb="menu"] {
+    background-color: #0B0F19 !important;
+    border: 1px solid #334155 !important;
+}
+ul[role="listbox"] li {
+    background-color: #0B0F19 !important;
+    color: #FFFFFF !important;
+}
+ul[role="listbox"] li:hover {
+    background-color: #1E293B !important;
 }
 
 /* =========================================================
@@ -413,11 +438,109 @@ div[data-baseweb="select"] span {
     margin-bottom: 24px;
 }
 
-/* Mengatur teks input/textarea agar kontras dengan warna hitam pekat dan background terang */
-div[data-baseweb="textarea"] textarea {
-    color: #000000 !important;
-    background-color: #f8fafc !important;
-    -webkit-text-fill-color: #000000 !important;
+/* =========================================================
+   12. KARTU BERBASIS st.container(key=...) -- BUKAN raw <div> pair
+   =========================================================
+   Catatan penting: st.markdown('<div>...') lalu st.markdown('</div>')
+   di DUA panggilan terpisah TIDAK benar-benar membungkus widget asli
+   Streamlit di antaranya (Streamlit merender tiap elemen sebagai blok
+   sendiri) -- hasilnya cuma tag <div> kosong yang ikut ter-style jadi
+   "kotak kosong" mengambang, sementara konten sebenarnya tidak ikut
+   ter-bungkus dan tampil polos di luar kartu. Solusinya: pakai
+   st.container(key="...") (native, benar-benar membungkus di DOM),
+   lalu style class turunannya di sini (Streamlit otomatis menambahkan
+   class "st-key-<key>" pada wrapper container tsb). */
+.st-key-scraping_form_card,
+.st-key-dashboard_filter_bar,
+.st-key-fenomena_config_card,
+div[class*="st-key-level_card_"] {
+    background: rgba(19, 27, 46, 0.7) !important;
+    border: 1px solid rgba(0, 240, 255, 0.2) !important;
+    border-radius: 12px !important;
+    padding: 24px !important;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
+    margin-bottom: 20px !important;
+}
+.st-key-scraping_form_card:hover,
+.st-key-dashboard_filter_bar:hover,
+.st-key-fenomena_config_card:hover,
+div[class*="st-key-level_card_"]:hover {
+    border-color: #00f0ff !important;
+}
+
+/* Level 5-Why yang ditandai sebagai akar masalah (root cause) -- dulu coba
+   diwarnai lewat inline style di outer div yang rusak; sekarang dipakai
+   sebagai badge kecil di dalam kartu supaya tetap menonjol tanpa
+   bergantung pada styling per-instance yang rapuh. */
+.root-cause-badge {
+    display: inline-block;
+    background: rgba(0, 240, 255, 0.12);
+    color: #00f0ff !important;
+    border: 1px solid rgba(0, 240, 255, 0.4);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+}
+
+/* =========================================================
+   13. KPI METRIC CARD (ikon badge + nilai + label) -- gaya NEATLAB
+   ========================================================= */
+.metric-card {
+    background: #151F32;
+    border: 1px solid #243552;
+    border-radius: 18px;
+    padding: 20px 22px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.45);
+    transition: transform .18s ease, border-color .18s ease;
+    height: 100%;
+}
+.metric-card:hover {
+    transform: translateY(-3px);
+    border-color: #38BDF8;
+}
+.metric-icon-badge {
+    width: 48px; height: 48px;
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+}
+.metric-icon-blue   { background: rgba(59,130,246,0.15); }
+.metric-icon-amber  { background: rgba(245,158,11,0.15); }
+.metric-icon-coral  { background: rgba(239,68,68,0.15); }
+.metric-icon-purple { background: rgba(139,92,246,0.15); }
+
+.metric-text-value {
+    font-size: 1.7rem;
+    font-weight: 800;
+    color: #FFFFFF !important;
+    line-height: 1.1;
+}
+.metric-text-label {
+    font-size: 0.8rem;
+    color: #94A3B8 !important;
+    font-weight: 600;
+    margin-top: 2px;
+}
+
+/* Textarea disamakan dgn text input (dark theme) -- sebelumnya dipaksa putih,
+   membuatnya menonjol aneh di antara input lain yang gelap. */
+div[data-baseweb="textarea"] textarea, textarea {
+    color: #FFFFFF !important;
+    background-color: #0B0F19 !important;
+    -webkit-text-fill-color: #FFFFFF !important;
+    border: 1.5px solid #334155 !important;
+    border-radius: 8px !important;
+}
+div[data-baseweb="textarea"] textarea:focus, textarea:focus {
+    border-color: #38BDF8 !important;
 }
 
 /* Memastikan label di atas textarea tetap terlihat kontras */
@@ -450,12 +573,6 @@ div[data-baseweb="textarea"] label {
 [data-testid="stSidebar"] [data-testid="stPageLink"] a:hover,
 [data-testid="stSidebar"] a:hover {
     color: #00f0ff !important; /* Berubah menjadi cyan terang */
-}
-
-div.st-key-input_query_tab1 textarea {
-    color: #111111 !important;
-    background-color: #f8f9fa !important;
-    -webkit-text-fill-color: #111111 !important;
 }
 
 div.st-key-input_query_tab1 label p {
