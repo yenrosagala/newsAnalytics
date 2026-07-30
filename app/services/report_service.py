@@ -4,16 +4,40 @@ import os
 from typing import List, Dict
 
 
+# fpdf2 core fonts (Helvetica/Arial/Times/Courier) render using LATIN-1,
+# bukan cp1252 (lihat FPDF.core_fonts_encoding). Perbedaan ini penting karena
+# karakter tipografi umum dari hasil AI/scraping -- kutip pintar "" ' ',
+# en/em-dash (–, —), elipsis, bullet -- ADA di cp1252 tapi TIDAK ADA di latin-1.
+# Encode ke cp1252 dulu (seperti sebelumnya) membuat sanitasi "lolos" tanpa
+# error, tapi fpdf2 lalu gagal total saat benar-benar menggambar glyph-nya:
+#   FPDFException: Character "–" ... is outside the range of characters
+#   supported by the font used: "helvetica"
+# Solusi: petakan dulu karakter tipografi umum ke padanan ASCII-nya, baru
+# encode ke latin-1 (dengan 'replace' sebagai jaring pengaman terakhir untuk
+# karakter langka lain seperti emoji/CJK).
+_PDF_TYPOGRAPHIC_CHAR_MAP = {
+    "\u201c": '"', "\u201d": '"',   # " "
+    "\u2018": "'", "\u2019": "'",   # ' '
+    "\u2013": "-", "\u2014": "-",   # en dash (–), em dash (—)
+    "\u2026": "...",                 # elipsis
+    "\u2022": "-",                   # bullet
+    "\u00a0": " ",                   # non-breaking space
+}
+
+
 def _sanitize_pdf_text(text: str) -> str:
-    """Bersihkan teks agar aman dirender font core fpdf2 (charset WinAnsi/cp1252),
+    """Bersihkan teks agar aman dirender font core fpdf2 (encoding latin-1),
     TANPA menghapus karakter tipografi umum (kutip miring "", en/em-dash, elipsis,
     bullet) seperti pendekatan encode('ascii','ignore') lama yang merusak teks
     hasil AI (mis. "kata—kata" jadi "katakata").
-    Hanya karakter yang benar-benar di luar cp1252 (mis. emoji, CJK) yang diganti '?'.
+    Karakter tipografi umum dipetakan ke padanan ASCII (mis. "" -> "), sisanya
+    yang benar-benar di luar latin-1 (mis. emoji, CJK) diganti '?'.
     """
     if not text:
         return ""
-    return text.encode("cp1252", "replace").decode("cp1252")
+    for src, dst in _PDF_TYPOGRAPHIC_CHAR_MAP.items():
+        text = text.replace(src, dst)
+    return text.encode("latin-1", "replace").decode("latin-1")
 
 
 class ReportService:
@@ -35,9 +59,11 @@ class ReportService:
         
         pdf.ln(5)
         
+        S = _sanitize_pdf_text
+
         for idx, item in enumerate(articles, 1):
             # Membuang latin-1 encode yang merusak karakter
-            judul = f"{idx}. {item.get('title', 'Tanpa Judul')}"
+            judul = S(f"{idx}. {item.get('title', 'Tanpa Judul')}")
             
             pdf.set_font("Arial", "B", 11)
             pdf.set_text_color(45, 55, 72)
@@ -45,7 +71,7 @@ class ReportService:
             
             pdf.set_font("Arial", "I", 8.5)
             pdf.set_text_color(113, 128, 150)
-            meta = f"Waktu: {item.get('published_date', '-')} | Kata Kunci: {item.get('keyword', '-')}"
+            meta = S(f"Waktu: {item.get('published_date', '-')} | Kata Kunci: {item.get('keyword', '-')}")
             pdf.cell(0, 5, text=meta, ln=True)
             
             pdf.ln(2)
@@ -53,7 +79,7 @@ class ReportService:
             pdf.set_text_color(45, 55, 72)
             
             # Langsung berikan text asli dari string Python, FPDF2 mendukung UTF-8
-            summary_text = f"Analisis AI:\n{item.get('summary', 'Rangkuman belum dibuat.')}"
+            summary_text = S(f"Analisis AI:\n{item.get('summary', 'Rangkuman belum dibuat.')}")
             
             pdf.set_fill_color(247, 250, 252)
             pdf.multi_cell(0, 5, text=summary_text, border="L", fill=True)
