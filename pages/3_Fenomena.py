@@ -36,10 +36,10 @@ st.set_page_config(page_title="Fenomena & Root Cause", layout="wide", page_icon=
 with st.sidebar:
     st.markdown("### ⚡ NewsAnalytics AI")
     st.markdown("---")
-    st.page_link("streamlit_app.py", label="Home Dashboard", icon="🏠")
-    st.page_link("pages/1_Scraping.py", label="News Insight", icon="📥")
-    st.page_link("pages/2_Dashboard.py", label="Analytics & Metrics", icon="📊")
-    st.page_link("pages/3_Fenomena.py", label="Fenomena (5-Why)", icon="🔍")
+    st.page_link("streamlit_app.py", label="Home", icon="🏠")
+    st.page_link("pages/1_Scraping.py", label="News Scraper", icon="📥")
+    st.page_link("pages/2_Dashboard.py", label="Analytics Dashboard", icon="📊")
+    st.page_link("pages/3_Fenomena.py", label="Root Cause Analysis", icon="🔍")
     st.markdown("---")
     st.markdown("### ℹ️ Informasi")
     st.caption(
@@ -50,7 +50,8 @@ with st.sidebar:
 render_auth_sidebar()
 
 # Header Halaman Utama dengan UI/UX Modern
-st.markdown("# 🔍 Fenomena & Recursive 5-Why Analysis")
+st.markdown("# 🔍 Root Cause Analysis")
+st.caption("Fenomena & Recursive 5-Why Analysis")
 st.markdown(
     "Identifikasi akar masalah secara mendalam berdasarkan temuan berita dan anomali data."
 )
@@ -89,48 +90,48 @@ def _parse_title_summary_json(raw_text: str, fallback_query: str) -> dict:
 def _render_level_details(
     level_info: dict, depth: int, url_to_global_number: dict | None = None
 ):
-    """Helper render satu blok level dengan container kartu fitur modern."""
+    """Helper render satu blok level dengan container kartu fitur modern.
+
+    Catatan: sebelumnya kartu ini dibuat dari sepasang st.markdown('<div>')
+    ... st.markdown('</div>') terpisah -- pola ini TIDAK benar-benar
+    membungkus widget Streamlit asli di antaranya (lihat catatan di CSS),
+    sehingga ringkasan/penyebab/bibliografi/keyword level tampil polos DI
+    LUAR kartu, dan tag <div> pembuka/penutup sendiri muncul sebagai kotak
+    kosong mengambang. Diganti dengan st.container(key=...) yang benar-benar
+    membungkus di DOM.
+    """
     is_root_cause = depth == 5
-    card_style = (
-        "border-color: #00f0ff; background: rgba(0,240,255,0.05);"
-        if is_root_cause
-        else ""
-    )
 
-    st.markdown(
-        f"""
-    <div class="feature-card" style="{card_style}">
-        <h4 style="color: {'#00f0ff' if is_root_cause else 'inherit'};">📍 Level {depth}: {', '.join(level_info.get('queries_used', []))}</h4>
-        <p style="color: #94a3b8; margin-bottom: 8px;"><b>Artikel Diekstrak:</b> {level_info.get('articles_found', 0)} artikel</p>
-    """,
-        unsafe_allow_html=True,
-    )
+    with st.container(key=f"level_card_{depth}"):
+        if is_root_cause:
+            st.markdown('<span class="root-cause-badge">🎯 Root Cause Level</span>', unsafe_allow_html=True)
 
-    if level_info.get("summary"):
-        st.markdown(
-            f"<p style='color: #cbd5e1;'><b>📝 Ringkasan Level:</b> {level_info['summary']}</p>",
-            unsafe_allow_html=True,
-        )
+        st.markdown(f"#### 📍 Level {depth}: {', '.join(level_info.get('queries_used', []))}")
+        st.markdown(f"<p style='color: #94a3b8; margin-bottom: 8px;'><b>Artikel Diekstrak:</b> {level_info.get('articles_found', 0)} artikel</p>", unsafe_allow_html=True)
 
-    if level_info.get("causes_extracted"):
-        st.markdown("<b>🔍 Penyebab Teridentifikasi:</b>", unsafe_allow_html=True)
-        for c in level_info["causes_extracted"]:
-            st.markdown(f"- 🔴 {c}")
+        if level_info.get("summary"):
+            st.markdown(
+                f"<p style='color: #cbd5e1;'><b>📝 Ringkasan Level:</b> {level_info['summary']}</p>",
+                unsafe_allow_html=True,
+            )
 
-    if level_info.get("bibliography"):
-        with st.expander(f"📚 Daftar Pustaka Level {depth}"):
-            url_to_global_number = url_to_global_number or {}
-            for local_idx, bib in enumerate(level_info["bibliography"], 1):
-                num = url_to_global_number.get(bib.get("url"), local_idx)
-                st.markdown(
-                    f"[{num}] {bib.get('author', 'Tidak diketahui')}. {bib.get('media', '-')}. {bib.get('date', '-')}. **{bib.get('title', 'Tanpa Judul')}**. [Link]({bib.get('url', '#')})"
-                )
+        if level_info.get("causes_extracted"):
+            st.markdown("<b>🔍 Penyebab Teridentifikasi:</b>", unsafe_allow_html=True)
+            for c in level_info["causes_extracted"]:
+                st.markdown(f"- 🔴 {c}")
 
-    if level_info.get("next_keywords"):
-        st.markdown("**➡️ Keyword Turunan:**")
-        st.info(" | ".join([f"`{kw}`" for kw in level_info["next_keywords"]]))
+        if level_info.get("bibliography"):
+            with st.expander(f"📚 Daftar Pustaka Level {depth}"):
+                url_to_global_number_local = url_to_global_number or {}
+                for local_idx, bib in enumerate(level_info["bibliography"], 1):
+                    num = url_to_global_number_local.get(bib.get("url"), local_idx)
+                    st.markdown(
+                        f"[{num}] {bib.get('author', 'Tidak diketahui')}. {bib.get('media', '-')}. {bib.get('date', '-')}. **{bib.get('title', 'Tanpa Judul')}**. [Link]({bib.get('url', '#')})"
+                    )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+        if level_info.get("next_keywords"):
+            st.markdown("**➡️ Keyword Turunan:**")
+            st.info(" | ".join([f"`{kw}`" for kw in level_info["next_keywords"]]))
 
 
 # --- STRUKTUR TAB UTAMA ---
@@ -139,8 +140,7 @@ tab_recursive, tab_pdf_recursive = st.tabs(
 )
 
 with tab_recursive:
-    with st.container():
-        st.markdown('<div class="feature-card">', unsafe_allow_html=True)
+    with st.container(key="fenomena_config_card"):
         st.subheader("⚙️ Konfigurasi Analisis Fenomena")
         initial_problem_query = st.text_area(
             "Deskripsi Fenomena / Masalah Utama",
@@ -162,7 +162,6 @@ with tab_recursive:
             key="btn_run_recursive",
             width="stretch",
         )
-        st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("---")
 
