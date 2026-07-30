@@ -20,10 +20,10 @@ except FileNotFoundError:
 with st.sidebar:
     st.markdown("### ⚡ NewsAnalytics AI")
     st.markdown("---")
-    st.page_link("streamlit_app.py", label="Home Dashboard", icon="🏠")
-    st.page_link("pages/1_Scraping.py", label="News Insight", icon="📥")
-    st.page_link("pages/2_Dashboard.py", label="Analytics & Metrics", icon="📊")
-    st.page_link("pages/3_Fenomena.py", label="Fenomena (5-Why)", icon="🔍")
+    st.page_link("streamlit_app.py", label="Home", icon="🏠")
+    st.page_link("pages/1_Scraping.py", label="News Scraper", icon="📥")
+    st.page_link("pages/2_Dashboard.py", label="Analytics Dashboard", icon="📊")
+    st.page_link("pages/3_Fenomena.py", label="Root Cause Analysis", icon="🔍")
     st.markdown("---")
     st.markdown("### ℹ️ Informasi")
     st.caption("Analytic and Database Management.")
@@ -35,7 +35,8 @@ st.set_page_config(page_title="FlashNews: Database Management", layout="wide", p
 render_auth_sidebar()
 
 # Header Halaman Utama
-st.markdown("# 📊 FlashNews: Database Management Dashboard")
+st.markdown("# 📊 Analytics Dashboard")
+st.caption("FlashNews: Database Management Dashboard")
 st.markdown("Panel Administrator untuk melihat, menganalisis, dan mengelola basis data berita yang tersimpan.")
 st.markdown("---")
 
@@ -66,23 +67,21 @@ col_title = "judul" if "judul" in df_raw.columns else "title"
 col_sentiment = "Sentimen" if "Sentimen" in df_raw.columns else ("sentiment" if "sentiment" in df_raw.columns else None)
 
 # UI/UX Pembaruan: Peningkatan Kontrol Panel Filter Horizontal di Bagian Atas
-st.markdown('<div class="horizontal-filter-bar">', unsafe_allow_html=True)
-st.markdown("#### ⚙️ Control Panel Data (Filter Global)")
-f_col1, f_col2, f_col3 = st.columns(3)
+with st.container(key="dashboard_filter_bar"):
+    st.markdown("#### ⚙️ Control Panel Data (Filter Global)")
+    f_col1, f_col2, f_col3 = st.columns(3)
 
-with f_col1:
-    available_options = list(df_raw[col_keyword].dropna().unique()) if col_keyword in df_raw.columns else []
-    selected_keyword = st.multiselect("Filter Keyword", options=available_options, default=None)
+    with f_col1:
+        available_options = list(df_raw[col_keyword].dropna().unique()) if col_keyword in df_raw.columns else []
+        selected_keyword = st.multiselect("Filter Keyword", options=available_options, default=None)
 
-with f_col2:
-    opsi_sentimen = list(df_raw[col_sentiment].dropna().unique()) if col_sentiment else ["POSITIVE", "NEGATIVE", "NEUTRAL"]
-    selected_sentimen = st.multiselect("Filter Sentimen", options=opsi_sentimen, default=opsi_sentimen)
+    with f_col2:
+        opsi_sentimen = list(df_raw[col_sentiment].dropna().unique()) if col_sentiment else ["POSITIVE", "NEGATIVE", "NEUTRAL"]
+        selected_sentimen = st.multiselect("Filter Sentimen", options=opsi_sentimen, default=opsi_sentimen)
 
-with f_col3:
-    opsi_media = list(df_raw[col_media].dropna().unique()) if col_media in df_raw.columns else []
-    selected_media = st.multiselect("Filter Media", options=opsi_media, default=None)
-
-st.markdown('</div>', unsafe_allow_html=True)
+    with f_col3:
+        opsi_media = list(df_raw[col_media].dropna().unique()) if col_media in df_raw.columns else []
+        selected_media = st.multiselect("Filter Media", options=opsi_media, default=None)
 
 filtered_df = df_raw.copy()
 if selected_keyword:
@@ -97,10 +96,23 @@ st.markdown("## 📈 Insights Utama")
 if filtered_df.empty:
     st.info("💡 Tidak ada data yang sesuai dengan kriteria filter Anda.")
 else:
+    def _metric_card(col, icon, color_class, value, label):
+        with col:
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-icon-badge {color_class}">{icon}</div>
+                <div>
+                    <div class="metric-text-value">{value}</div>
+                    <div class="metric-text-label">{label}</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
     kpi1, kpi2, kpi3 = st.columns(3)
-    kpi1.metric("Total Berita Terfilter", len(filtered_df))
-    kpi2.metric("Portal Media Unik", filtered_df[col_media].nunique() if col_media in filtered_df.columns else 0)
-    kpi3.metric("Keyword Aktif", filtered_df[col_keyword].nunique() if col_keyword in filtered_df.columns else 0)
+    _metric_card(kpi1, "📰", "metric-icon-blue", f"{len(filtered_df):,}", "Total Berita Terfilter")
+    _metric_card(kpi2, "🏢", "metric-icon-amber", f"{filtered_df[col_media].nunique() if col_media in filtered_df.columns else 0:,}", "Portal Media Unik")
+    _metric_card(kpi3, "🔖", "metric-icon-purple", f"{filtered_df[col_keyword].nunique() if col_keyword in filtered_df.columns else 0:,}", "Keyword Aktif")
+    st.write("")
 
     insights = []
     top_media = filtered_df[col_media].value_counts() if col_media in filtered_df.columns else []
@@ -127,16 +139,48 @@ else:
 
 # Grafik Analitik Berdampingan
 st.markdown("### 📊 Grafik Analitik")
+
+def _sentiment_color_map(series):
+    """Petakan tiap nilai sentimen unik ke warna semantik (hijau/merah/abu-abu),
+    case-insensitive supaya cocok baik untuk 'POSITIVE' maupun 'Positive'."""
+    palette = {}
+    for val in series.dropna().unique():
+        v = str(val).strip().lower()
+        if v.startswith("pos"):
+            palette[val] = "#10B981"   # hijau
+        elif v.startswith("neg"):
+            palette[val] = "#EF4444"   # merah
+        else:
+            palette[val] = "#94A3B8"   # netral / abu-abu
+    return palette
+
+_dark_chart_layout = dict(
+    template="plotly_dark",
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    font_color="#E2E8F0",
+    title_font_color="#FFFFFF",
+    margin=dict(t=48, b=10, l=10, r=10),
+)
+
 col_chart1, col_chart2 = st.columns(2)
 with col_chart1:
     if col_sentiment and col_sentiment in filtered_df.columns:
-        fig_pie = px.pie(filtered_df, names=col_sentiment, title="Distribusi Sentimen Berita", hole=0.4)
+        fig_pie = px.pie(
+            filtered_df, names=col_sentiment, title="Distribusi Sentimen Berita", hole=0.4,
+            color=col_sentiment, color_discrete_map=_sentiment_color_map(filtered_df[col_sentiment]),
+        )
+        fig_pie.update_layout(**_dark_chart_layout)
         st.plotly_chart(fig_pie, width='stretch')
 with col_chart2:
     if col_media in filtered_df.columns:
         top_media_chart = filtered_df[col_media].value_counts().reset_index()
         top_media_chart.columns = ['Media', 'Jumlah']
-        fig_bar = px.bar(top_media_chart.head(10), x='Media', y='Jumlah', title="Top 10 Portal Media", color='Jumlah')
+        fig_bar = px.bar(
+            top_media_chart.head(10), x='Media', y='Jumlah', title="Top 10 Portal Media",
+            color='Jumlah', color_continuous_scale=["#0B2A4A", "#38BDF8"],
+        )
+        fig_bar.update_layout(**_dark_chart_layout)
         st.plotly_chart(fig_bar, width='stretch')
 
 st.markdown("### 📋 Daftar Berita Tersimpan")
