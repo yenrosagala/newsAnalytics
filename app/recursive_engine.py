@@ -1,17 +1,29 @@
 """
-Recursive 5-Why Engine
-======================
+AI Investigator Engine (Recursive 5-Why + Evidence Graph + Confidence Scoring)
+===============================================================================
 Menjalankan analisis akar-masalah (root cause) secara bertingkat terhadap
 sebuah topik berita, dengan pola pikir "5 Why":
 
   Level 1: cari berita untuk query awal -> AI merangkum & mengekstrak
-           penyebab (causes) + kata kunci turunan (next_keywords)
+           penyebab (causes, masing-masing dengan skor keyakinan) +
+           kata kunci turunan (next_keywords)
   Level 2..N: ulangi proses di atas menggunakan kata kunci turunan dari
               level sebelumnya, sampai max_depth tercapai atau tidak ada
               lagi artikel/kata kunci baru yang ditemukan.
 
-Dipakai oleh pages/3_Fenomena.py melalui:
+Setiap penyebab (cause) yang diekstrak AI diberi skor KEYAKINAN (confidence)
+gabungan dari dua komponen yang transparan (lihat `_compute_composite_confidence`):
+  1. Keyakinan yang dilaporkan sendiri oleh AI (self-reported, 0-100) --
+     seberapa eksplisit & konsisten penyebab tsb dinyatakan di korpus.
+  2. Skor keragaman sumber (corroboration) -- makin banyak media independen
+     yang meliput level ini, makin besar skor ini (proxy sederhana untuk
+     "seberapa terkorroborasi" temuan level tsb, BUKAN pengecekan fakta).
+Komposit = 60% self-reported + 40% keragaman sumber, ditampilkan terpisah
+di UI supaya pengguna bisa menilai sendiri, bukan angka black-box.
+
+Dipakai oleh pages/3_Fenomena.py (AI Investigator) melalui:
     run_recursive_5why_pipeline_with_progress(initial_query, max_depth, progress_bar, status_text)
+    build_evidence_graph_data(result_tree)
 """
 import json
 import re
@@ -27,6 +39,12 @@ ARTICLES_PER_LEVEL = 20
 MAX_ARTICLES_IN_PROMPT = 30
 MAX_CONTENT_CHARS_PER_ARTICLE = 15000
 
+# Bobot komposit skor keyakinan (lihat _compute_composite_confidence)
+CONFIDENCE_WEIGHT_AI_SELF_REPORT = 0.6
+CONFIDENCE_WEIGHT_SOURCE_DIVERSITY = 0.4
+# Jumlah sumber independen di suatu level yang dianggap "keragaman penuh" (100)
+SOURCE_DIVERSITY_SATURATION = 5
+
 
 def _build_analysis_prompt(current_queries: List[str], depth: int, articles: List[Dict]) -> str:
     corpus_parts = []
@@ -40,7 +58,7 @@ def _build_analysis_prompt(current_queries: List[str], depth: int, articles: Lis
         )
     corpus = "\n\n---\n\n".join(corpus_parts) if corpus_parts else "Tidak ada artikel relevan yang ditemukan."
 
-    return f"""Anda adalah analis root-cause profesional yang menjalankan metode "5 Why" secara bertingkat terhadap berita.
+    return f"""Anda adalah analis root-cause profesional (AI Investigator) yang menjalankan metode "5 Why" secara bertingkat terhadap berita.
 
 Level analisis saat ini: {depth}
 Query pencarian yang digunakan: {", ".join(current_queries)}
@@ -50,15 +68,54 @@ Berikut kumpulan artikel berita yang relevan:
 
 Tugas Anda:
 1. Buat RINGKASAN singkat (3-5 kalimat) mengenai apa yang terjadi berdasarkan artikel di atas.
-2. Identifikasi 2-5 PENYEBAB (causes) spesifik yang terungkap dari artikel di atas yang menjelaskan MENGAPA fenomena ini terjadi.
+2. Identifikasi 2-5 PENYEBAB (causes) spesifik yang terungkap dari artikel di atas yang menjelaskan MENGAPA fenomena ini terjadi. Untuk SETIAP penyebab, berikan juga:
+   - "confidence": skor keyakinan 0-100 seberapa EKSPLISIT & KONSISTEN penyebab ini dinyatakan di korpus artikel di atas (bukan opini pribadi Anda soal topiknya). Gunakan panduan ini:
+       * 80-100: dinyatakan eksplisit oleh banyak artikel/sumber resmi (pejabat, data resmi) secara konsisten.
+       * 50-79: dinyatakan eksplisit oleh sebagian artikel, atau disimpulkan cukup kuat dari fakta yang disajikan.
+       * 20-49: hanya diisyaratkan/disinggung sekilas oleh satu-dua sumber, belum ditegaskan langsung.
+       * 0-19: dugaan/interpretasi Anda sendiri, tidak dinyatakan langsung oleh sumber manapun.
+   - "rationale": SATU kalimat singkat yang menjelaskan dasar skor keyakinan tsb (mis. "Disebutkan langsung oleh juru bicara BPS di 3 artikel berbeda").
 3. Dari penyebab-penyebab tersebut, turunkan 1-3 KATA KUNCI PENCARIAN baru (next_keywords) yang lebih spesifik untuk level "why" berikutnya, guna menggali lebih dalam akar masalahnya.
 
 Jawab HANYA dalam format JSON valid persis seperti ini, tanpa teks lain, tanpa markdown code fence:
 {{
   "summary": "...",
-  "causes": ["...", "..."],
+  "causes": [
+    {{"cause": "...", "confidence": 0, "rationale": "..."}},
+    {{"cause": "...", "confidence": 0, "rationale": "..."}}
+  ],
   "next_keywords": ["...", "..."]
 }}"""
+
+
+def _normalize_causes(raw_causes: List) -> List[Dict]:
+    """Menyeragamkan `causes` jadi list of dict {cause, confidence, rationale}.
+
+    Menangani dua bentuk input:
+    - Baru (diharapkan): [{"cause": "...", "confidence": 65, "rationale": "..."}]
+    - Lama/fallback (mis. AI abaikan instruksi, atau data lama di DB history):
+      ["teks penyebab", ...] -- dibungkus dengan confidence None (artinya
+      "tidak diketahui", ditampilkan beda dari skor 0 di UI).
+    """
+    normalized = []
+    for item in raw_causes or []:
+        if isinstance(item, dict):
+            cause_text = str(item.get("cause") or item.get("text") or "").strip()
+            if not cause_text:
+                continue
+            conf = item.get("confidence")
+            try:
+                conf = max(0, min(100, int(conf))) if conf is not None else None
+            except (TypeError, ValueError):
+                conf = None
+            normalized.append({
+                "cause": cause_text,
+                "confidence": conf,
+                "rationale": str(item.get("rationale") or "").strip(),
+            })
+        elif isinstance(item, str) and item.strip():
+            normalized.append({"cause": item.strip(), "confidence": None, "rationale": ""})
+    return normalized
 
 
 def _parse_ai_json(raw_text: str) -> Dict:
@@ -73,7 +130,7 @@ def _parse_ai_json(raw_text: str) -> Dict:
         data = json.loads(text)
         return {
             "summary": data.get("summary", "") or "",
-            "causes": data.get("causes") or [],
+            "causes": _normalize_causes(data.get("causes") or []),
             "next_keywords": data.get("next_keywords") or [],
         }
     except Exception as e:
@@ -185,9 +242,148 @@ def format_level_breakdown_for_prompt(result_tree: List[Dict]) -> str:
         if causes:
             parts.append("Penyebab teridentifikasi di level ini:")
             for c in causes:
-                parts.append(f"- {c}")
+                if isinstance(c, dict):
+                    conf = c.get("confidence")
+                    conf_str = f" (keyakinan: {conf}%)" if conf is not None else ""
+                    parts.append(f"- {c.get('cause', '')}{conf_str}")
+                else:
+                    parts.append(f"- {c}")
         parts.append("")
     return "\n".join(parts)
+
+
+# ------------------------------------------------------------------
+# Confidence scoring
+# ------------------------------------------------------------------
+def _compute_source_diversity_score(bibliography: List[Dict]) -> int:
+    """Skor 0-100 berdasarkan jumlah media independen yang meliput level ini.
+    Proxy sederhana untuk 'seberapa terkorroborasi' temuan level tsb --
+    BUKAN pengecekan fakta, murni jumlah sumber berbeda."""
+    if not bibliography:
+        return 0
+    distinct_media = {b.get("media") for b in bibliography if b.get("media") and b.get("media") != "-"}
+    if not distinct_media:
+        return 0
+    return round(min(len(distinct_media), SOURCE_DIVERSITY_SATURATION) / SOURCE_DIVERSITY_SATURATION * 100)
+
+
+def _compute_composite_confidence(ai_confidence: int | None, source_diversity_score: int) -> Dict:
+    """Gabungkan keyakinan self-report AI dengan skor keragaman sumber.
+    Kalau AI tidak melaporkan confidence (None), komposit = skor keragaman
+    sumber saja (fallback aman, tidak menebak-nebak angka AI)."""
+    if ai_confidence is None:
+        composite = source_diversity_score
+        ai_component = None
+    else:
+        composite = round(
+            CONFIDENCE_WEIGHT_AI_SELF_REPORT * ai_confidence
+            + CONFIDENCE_WEIGHT_SOURCE_DIVERSITY * source_diversity_score
+        )
+        ai_component = ai_confidence
+
+    if composite >= 70:
+        tier = "Tinggi"
+    elif composite >= 40:
+        tier = "Sedang"
+    else:
+        tier = "Rendah"
+
+    return {
+        "composite": composite,
+        "tier": tier,
+        "ai_self_reported": ai_component,
+        "source_diversity": source_diversity_score,
+    }
+
+
+def annotate_confidence(result_tree: List[Dict]) -> List[Dict]:
+    """Tambahkan skor keyakinan komposit ke setiap cause di setiap level
+    (in-place pada salinan) berdasarkan bibliography level tsb."""
+    for lvl in result_tree:
+        diversity = _compute_source_diversity_score(lvl.get("bibliography") or [])
+        lvl["source_diversity_score"] = diversity
+        for cause in lvl.get("causes_extracted") or []:
+            if isinstance(cause, dict):
+                cause["confidence_detail"] = _compute_composite_confidence(
+                    cause.get("confidence"), diversity
+                )
+    return result_tree
+
+
+# ------------------------------------------------------------------
+# Evidence graph
+# ------------------------------------------------------------------
+def build_evidence_graph_data(result_tree: List[Dict]) -> Dict:
+    """Susun struktur node/edge dari hasil recursive pipeline untuk divisualisasikan
+    sebagai evidence graph (lihat app/services/evidence_graph.py untuk rendering-nya).
+
+    Struktur:
+    - Satu node "investigasi" per level (rantai utama Level 1 -> 2 -> ... -> N).
+    - Beberapa node "penyebab" (cause) bercabang dari tiap node investigasi,
+      diwarnai berdasarkan tier keyakinan komposit.
+    - Penyebab dengan keyakinan tertinggi di level TERAKHIR ditandai sebagai
+      "root cause" (akar masalah paling dalam yang teridentifikasi).
+    """
+    nodes = []
+    edges = []
+
+    if not result_tree:
+        return {"nodes": nodes, "edges": edges, "root_cause_node_id": None}
+
+    root_id = "root"
+    nodes.append({
+        "id": root_id,
+        "type": "phenomenon",
+        "label": ", ".join(result_tree[0].get("queries_used", ["Fenomena Awal"])),
+        "depth": 0,
+    })
+
+    prev_investigation_id = root_id
+    last_level_cause_ids = []
+
+    for lvl in result_tree:
+        depth = lvl["depth"]
+        inv_id = f"level_{depth}"
+        nodes.append({
+            "id": inv_id,
+            "type": "investigation",
+            "label": f"Level {depth}: {', '.join(lvl.get('queries_used', []))}",
+            "depth": depth,
+            "articles_found": lvl.get("articles_found", 0),
+        })
+        edges.append({"source": prev_investigation_id, "target": inv_id, "type": "drilldown"})
+        prev_investigation_id = inv_id
+
+        level_cause_ids = []
+        for i, cause in enumerate(lvl.get("causes_extracted") or []):
+            if not isinstance(cause, dict):
+                continue
+            cause_id = f"cause_{depth}_{i}"
+            detail = cause.get("confidence_detail") or _compute_composite_confidence(
+                cause.get("confidence"), lvl.get("source_diversity_score", 0)
+            )
+            nodes.append({
+                "id": cause_id,
+                "type": "cause",
+                "label": cause.get("cause", ""),
+                "depth": depth,
+                "confidence": detail.get("composite", 0),
+                "tier": detail.get("tier", "Rendah"),
+                "rationale": cause.get("rationale", ""),
+            })
+            edges.append({"source": inv_id, "target": cause_id, "type": "evidence"})
+            level_cause_ids.append((cause_id, detail.get("composite", 0)))
+
+        last_level_cause_ids = level_cause_ids
+
+    root_cause_node_id = None
+    if last_level_cause_ids:
+        root_cause_node_id = max(last_level_cause_ids, key=lambda t: t[1])[0]
+        for node in nodes:
+            if node["id"] == root_cause_node_id:
+                node["is_root_cause"] = True
+
+    return {"nodes": nodes, "edges": edges, "root_cause_node_id": root_cause_node_id}
 
 
 async def run_recursive_5why_pipeline_with_progress(
@@ -251,9 +447,11 @@ async def run_recursive_5why_pipeline_with_progress(
             break
         current_queries = next_keywords[:3]
 
+    annotate_confidence(result_tree)
+
     if progress_bar:
         progress_bar.progress(1.0)
     if status_text:
-        status_text.text("Analisis Recursive 5-Why selesai.")
+        status_text.text("Analisis AI Investigator selesai.")
 
     return result_tree
