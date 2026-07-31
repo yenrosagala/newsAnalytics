@@ -21,22 +21,22 @@ with st.sidebar:
     st.markdown("### ⚡ NewsAnalytics AI")
     st.markdown("---")
     st.page_link("streamlit_app.py", label="Home", icon="🏠")
-    st.page_link("pages/1_Scraping.py", label="News Scraper", icon="📥")
+    st.page_link("pages/1_Scraping.py", label="AI Understanding", icon="📥")
     st.page_link("pages/2_Dashboard.py", label="Analytics Dashboard", icon="📊")
-    st.page_link("pages/3_Fenomena.py", label="Root Cause Analysis", icon="🔍")
+    st.page_link("pages/3_Fenomena.py", label="AI Investigator", icon="🔍")
     st.markdown("---")
     st.markdown("### ℹ️ Informasi")
-    st.caption("Analytic and Database Management.")
+    st.caption("Fitur mengeksplorasi berita dan memberikan insight secara menyeluruh.")
 
 # Konfigurasi Halaman dengan layout wide
-st.set_page_config(page_title="FlashNews: Database Management", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Analytics", layout="wide", page_icon="📊")
 
 # Render autentikasi sidebar
 render_auth_sidebar()
 
 # Header Halaman Utama
 st.markdown("# 📊 Analytics Dashboard")
-st.caption("FlashNews: Database Management Dashboard")
+st.caption("Dashboard and Admin Management")
 st.markdown("Panel Administrator untuk melihat, menganalisis, dan mengelola basis data berita yang tersimpan.")
 st.markdown("---")
 
