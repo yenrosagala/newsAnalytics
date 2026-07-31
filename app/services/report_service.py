@@ -116,7 +116,7 @@ class ReportService:
         # --- SAMPUL ---
         pdf.set_font("Helvetica", "", 9)
         pdf.set_text_color(120, 120, 120)
-        pdf.cell(170, 6, "LAPORAN ROOT CAUSE ANALYSIS (METODE 5-WHY BERTINGKAT)", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(170, 6, "AI INVESTIGATOR -- EXECUTIVE INTELLIGENCE BRIEF (RECURSIVE ROOT CAUSE ANALYSIS)", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
 
         pdf.set_font("Helvetica", "B", 17)
@@ -146,10 +146,10 @@ class ReportService:
         pdf.line(20, pdf.get_y(), 190, pdf.get_y())
         pdf.ln(8)
 
-        # --- RINGKASAN EKSEKUTIF ---
+        # --- EXECUTIVE INTELLIGENCE BRIEF ---
         pdf.set_font("Helvetica", "B", 13)
         pdf.set_text_color(0, 100, 180)
-        pdf.cell(170, 8, "Ringkasan Eksekutif", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(170, 8, "Executive Intelligence Brief", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
 
         pdf.set_font("Helvetica", "", 11)
@@ -206,11 +206,25 @@ class ReportService:
             if causes:
                 pdf.set_font("Helvetica", "B", 9.5)
                 pdf.set_text_color(180, 40, 40)
-                pdf.cell(170, 5.5, "Penyebab Teridentifikasi (Indikasi):", new_x="LMARGIN", new_y="NEXT")
+                pdf.cell(170, 5.5, "Penyebab Teridentifikasi (dengan Skor Keyakinan):", new_x="LMARGIN", new_y="NEXT")
                 pdf.set_font("Helvetica", "", 9.5)
                 pdf.set_text_color(40, 40, 40)
                 for c in causes:
-                    pdf.multi_cell(170, 5.3, S(f"- {c}"), new_x="LMARGIN", new_y="NEXT")
+                    if isinstance(c, dict):
+                        detail = c.get("confidence_detail") or {}
+                        composite = detail.get("composite")
+                        tier = detail.get("tier")
+                        conf_str = f" [Keyakinan: {composite}% - {tier}]" if composite is not None else ""
+                        line = f"- {c.get('cause', '')}{conf_str}"
+                        pdf.multi_cell(170, 5.3, S(line), new_x="LMARGIN", new_y="NEXT")
+                        if c.get("rationale"):
+                            pdf.set_font("Helvetica", "I", 8.5)
+                            pdf.set_text_color(110, 110, 110)
+                            pdf.multi_cell(170, 4.8, S(f"  Dasar: {c['rationale']}"), new_x="LMARGIN", new_y="NEXT")
+                            pdf.set_font("Helvetica", "", 9.5)
+                            pdf.set_text_color(40, 40, 40)
+                    else:
+                        pdf.multi_cell(170, 5.3, S(f"- {c}"), new_x="LMARGIN", new_y="NEXT")
 
             pdf.ln(5)
 
@@ -278,7 +292,7 @@ class ReportService:
         pdf.ln(4)
         pdf.set_font("Helvetica", "I", 8)
         pdf.set_text_color(140, 140, 140)
-        pdf.cell(170, 4, "Laporan ini dihasilkan secara otomatis oleh sistem News Intelligence Dashboard.", align="C", new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(170, 4, "Laporan ini dihasilkan otomatis oleh AI Investigator - AI Decision Intelligence Platform.", align="C", new_x="LMARGIN", new_y="NEXT")
 
         return bytes(pdf.output())
 
