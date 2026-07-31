@@ -6,6 +6,7 @@ import os
 from app.services.scraper_service import scraper_service
 from app.services.database_service import db_service 
 from app.services.ai_service import ai_service
+from app.services.clustering_service import clustering_service
 from app.core.config import Config  
 from app.core.logger import setup_logger
 from app.generate_pdf import generate_pdf_report
@@ -231,3 +232,111 @@ if not df_latest.empty:
         st.markdown("<hr style='margin: 5px 0; border-color: rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
 else:
     st.info("Belum ada data berita tersimpan di database.")
+
+st.divider()
+
+# --- BAGIAN STORY CLUSTERING & TIMELINE (Fase 1: Intelligence Layer) ---
+st.subheader("🧩 Pengelompokan Cerita (Story Clustering) & Timeline")
+st.caption(
+    "Artikel yang membahas peristiwa/isu yang sama otomatis dikelompokkan menjadi satu "
+    "'cerita', lalu disusun secara kronologis untuk melihat bagaimana cerita itu berkembang."
+)
+
+@st.cache_data(ttl=60)
+def _load_data_for_clustering():
+    return db_service.get_latest_scraped_data(limit=500)
+
+df_for_cluster = _load_data_for_clustering()
+
+if df_for_cluster.empty:
+    st.info("Belum ada data berita untuk dianalisis clustering.")
+else:
+    cluster_keyword_options = (
+        list(df_for_cluster["kata_kunci"].dropna().unique())
+        if "kata_kunci" in df_for_cluster.columns else []
+    )
+    current_kw = st.session_state.get("current_keyword")
+    default_cluster_kw = [current_kw] if current_kw in cluster_keyword_options else cluster_keyword_options[:1]
+
+    col_ck1, col_ck2 = st.columns([3, 1])
+    with col_ck1:
+        selected_cluster_keywords = st.multiselect(
+            "Pilih Keyword untuk Dianalisis",
+            options=cluster_keyword_options,
+            default=default_cluster_kw,
+            key="cluster_keyword_filter",
+        )
+    with col_ck2:
+        similarity_threshold = st.slider(
+            "Ambang Kemiripan",
+            min_value=0.5, max_value=0.95, value=0.75, step=0.05,
+            help="Makin kecil = pengelompokan makin ketat (artikel harus sangat mirip untuk jadi satu cerita). "
+                 "Makin besar = pengelompokan makin longgar.",
+            key="cluster_similarity_threshold",
+        )
+
+    df_to_cluster = (
+        df_for_cluster[df_for_cluster["kata_kunci"].isin(selected_cluster_keywords)]
+        if selected_cluster_keywords else df_for_cluster
+    )
+
+    if df_to_cluster.empty:
+        st.info("Tidak ada artikel pada keyword yang dipilih.")
+    else:
+        with st.spinner("Menganalisis kemiripan antar artikel..."):
+            clustering_service.distance_threshold = similarity_threshold
+            clustered_df = clustering_service.cluster(df_to_cluster)
+            cluster_summary = clustering_service.build_cluster_summary(clustered_df)
+
+        total_stories = clustered_df["cluster_id"].nunique()
+        multi_source_stories = int((cluster_summary["jumlah_artikel"] > 1).sum()) if not cluster_summary.empty else 0
+
+        m_col1, m_col2, m_col3 = st.columns(3)
+        m_col1.metric("Total Artikel Dianalisis", len(clustered_df))
+        m_col2.metric("Jumlah Cerita Unik", total_stories)
+        m_col3.metric("Cerita dengan >1 Sumber", multi_source_stories)
+
+        timeline_fig = clustering_service.build_timeline_fig(clustered_df)
+        if timeline_fig is not None:
+            st.plotly_chart(timeline_fig, width='stretch')
+        else:
+            st.info("Tidak cukup data bertanggal untuk membuat grafik timeline.")
+
+        st.markdown("#### 📖 Detail Cerita (Diurutkan dari Paling Banyak Diberitakan)")
+        if cluster_summary.empty:
+            st.info("Tidak ada cerita untuk ditampilkan.")
+        else:
+            for _, row in cluster_summary.iterrows():
+                cid = row["cluster_id"]
+                articles_in_cluster = clustered_df[clustered_df["cluster_id"] == cid].copy()
+                if "waktu_tampilan" in articles_in_cluster.columns:
+                    articles_in_cluster["waktu_tampilan"] = pd.to_datetime(
+                        articles_in_cluster["waktu_tampilan"], errors="coerce"
+                    )
+                    articles_in_cluster = articles_in_cluster.sort_values("waktu_tampilan")
+
+                jumlah = int(row["jumlah_artikel"])
+                badge = "🔥" if jumlah >= 3 else ("📰" if jumlah > 1 else "📄")
+                media_terlibat = row.get("media_terlibat", "-")
+                header = f"{badge} {row['cluster_label']} — {jumlah} artikel"
+
+                with st.expander(header):
+                    st.caption(
+                        f"Rentang waktu: {row.get('tanggal_mulai', '-')} s/d {row.get('tanggal_akhir', '-')} "
+                        f"| Media: {media_terlibat}"
+                    )
+                    total_dalam_cerita = len(articles_in_cluster)
+                    for i, (_, art) in enumerate(articles_in_cluster.iterrows(), start=1):
+                        tgl = art.get("waktu_tampilan")
+                        tanggal_str = tgl.strftime("%d %b %Y, %H:%M") if pd.notnull(tgl) else "-"
+                        st.markdown(f"**{i}. {art.get('judul', '-')}**")
+                        st.caption(f"🗓️ {tanggal_str}  •  📰 {art.get('media', '-')}  •  🏷️ {art.get('Sentimen', '-')}")
+                        konten = str(art.get("isi_konten", "") or "")
+                        cuplikan = (konten[:220] + "...") if len(konten) > 220 else konten
+                        if cuplikan:
+                            st.write(cuplikan)
+                        if i < total_dalam_cerita:
+                            st.markdown(
+                                "<div style='border-left:2px solid #38BDF8; height:14px; margin-left:8px;'></div>",
+                                unsafe_allow_html=True,
+                            )
