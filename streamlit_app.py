@@ -15,12 +15,12 @@ if os.path.exists(css_path):
 
 with st.sidebar:
     st.markdown("### ⚡ NewsAnalytics AI")
-    st.caption("Futuristic Intelligence & Root Cause Engine")
+    st.caption("AI Decision Intelligence Platform")
     st.markdown("---")
     st.page_link("streamlit_app.py", label="Home", icon="🏠")
-    st.page_link("pages/1_Scraping.py", label="News Scraper", icon="📥")
+    st.page_link("pages/1_Scraping.py", label="AI Understanding", icon="📥")
     st.page_link("pages/2_Dashboard.py", label="Analytics Dashboard", icon="📊")
-    st.page_link("pages/3_Fenomena.py", label="Root Cause Analysis", icon="🔍")
+    st.page_link("pages/3_Fenomena.py", label="AI Investigator", icon="🕵️")
     
     st.markdown("---")
     st.markdown("""
@@ -32,7 +32,7 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 st.markdown("# ⚡ NewsAnalytics Professional Hub")
-st.markdown("### Platform Analisis Berita & Root Cause Intelligence Berbasis AI")
+st.markdown("### AI Decision Intelligence Platform — Ubah Berita Menjadi Intelijen yang Actionable")
 st.markdown("---")
 
 col1, col2, col3 = st.columns(3)
@@ -40,8 +40,8 @@ col1, col2, col3 = st.columns(3)
 with col1:
     st.markdown("""
     <div class="feature-card">
-        <h3>📥 News Scraper</h3>
-        <p style="color: #94a3b8; font-size: 0.9rem;">Ambil data berita terkini secara real-time dan kelola ringkasan eksekutif tersimpan melalui tabel terstruktur.</p>
+        <h3>📥 AI Understanding</h3>
+        <p style="color: #94a3b8; font-size: 0.9rem;">Mengekstrak informasi berita secara real-time dan mengelola penyimpanan ringkasan eksekutif menggunakan format tabel yang sistematis.</p>
     </div>
     """, unsafe_allow_html=True)
     if st.button("Buka News Scraper", key="btn_scraping", width='stretch', type="primary"):
@@ -60,9 +60,9 @@ with col2:
 with col3:
     st.markdown("""
     <div class="feature-card">
-        <h3>🔍 Root Cause Analysis</h3>
-        <p style="color: #94a3b8; font-size: 0.9rem;">Analisis akar masalah secara rekursif mendalam dilengkapi panduan visual interaktif pada area kosong.</p>
+        <h3>🕵️ AI Investigator</h3>
+        <p style="color: #94a3b8; font-size: 0.9rem;">Telusuri akar masalah secara rekursif mendalam, lengkap dengan evidence graph & skor keyakinan, dirangkum sebagai Executive Intelligence Brief.</p>
     </div>
     """, unsafe_allow_html=True)
-    if st.button("Buka Root Cause Analysis", key="btn_fenomena", width='stretch', type="primary"):
+    if st.button("Buka AI Investigator", key="btn_fenomena", width='stretch', type="primary"):
         st.switch_page("pages/3_Fenomena.py")
