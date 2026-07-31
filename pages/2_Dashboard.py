@@ -152,7 +152,7 @@ def show_news_detail(row):
     if st.button("Tutup"):
         st.rerun()
 
-event = st.dataframe(filtered_df, use_container_width=True, selection_msingle-row=True, on_select="rerun", key="data_editor")
+event = st.dataframe(filtered_df, use_container_width=True, selection_mode="single-row", on_select="rerun", key="data_editor")
 
 if is_admin:
     selection = st.session_state.get("data_editor", None)
