@@ -14,10 +14,12 @@ from app.recursive_engine import (
     format_bibliography_for_prompt,
     format_level_breakdown_for_prompt,
     validate_citation_diversity,
+    build_evidence_graph_data,
 )
 from app.services.ai_service import ai_service
 from app.services.database_service import db_service
 from app.services.report_service import report_service
+from app.services.evidence_graph import build_evidence_graph_fig
 import streamlit as st
 
 config = Config()
@@ -30,30 +32,33 @@ if os.path.exists(css_path):
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 # Konfigurasi Halaman (Wajib dipanggil pertama kali)
-st.set_page_config(page_title="Fenomena & Root Cause", layout="wide", page_icon="🔍")
+st.set_page_config(page_title="AI Investigator", layout="wide", page_icon="🕵️")
 
 # Sidebar Navigasi & Informasi Konsisten dengan Halaman Lain
 with st.sidebar:
     st.markdown("### ⚡ NewsAnalytics AI")
     st.markdown("---")
     st.page_link("streamlit_app.py", label="Home", icon="🏠")
-    st.page_link("pages/1_Scraping.py", label="AI Understanding", icon="📥")
+    st.page_link("pages/1_Scraping.py", label="News Scraper", icon="📥")
     st.page_link("pages/2_Dashboard.py", label="Analytics Dashboard", icon="📊")
-    st.page_link("pages/3_Fenomena.py", label="AI Investigator", icon="🔍")
+    st.page_link("pages/3_Fenomena.py", label="AI Investigator", icon="🕵️")
     st.markdown("---")
     st.markdown("### ℹ️ Informasi")
     st.caption(
-        "Fitur Recursive 5 Why: mengeksplorasi berita secara berlapis guna mengidentifikasi akar permasalahan di balik suatu fenomena."
+        "AI Investigator menelusuri berita secara berlapis (Recursive 5-Why) untuk "
+        "mengidentifikasi akar permasalahan, lengkap dengan evidence graph & skor keyakinan."
     )
 
 # Render autentikasi sidebar
 render_auth_sidebar()
 
 # Header Halaman Utama dengan UI/UX Modern
-st.markdown("# 🔍AI Investigator")
-st.caption("Roor Cause Analysis")
+st.markdown("# 🕵️ AI Investigator")
+st.caption("Recursive Root Cause Analysis · Evidence Graph · Confidence Scoring")
 st.markdown(
-    "Identifikasi akar masalah secara mendalam berdasarkan temuan berita dan anomali data."
+    "Telusuri akar masalah secara mendalam berdasarkan temuan berita, lengkap dengan "
+    "peta bukti (evidence graph) dan skor keyakinan per penyebab, lalu ringkas hasilnya "
+    "menjadi Executive Intelligence Brief siap-pakai."
 )
 st.markdown("---")
 
@@ -88,25 +93,23 @@ def _parse_title_summary_json(raw_text: str, fallback_query: str) -> dict:
 
 
 def _render_level_details(
-    level_info: dict, depth: int, url_to_global_number: dict | None = None
+    level_info: dict,
+    depth: int,
+    total_levels: int,
+    url_to_global_number: dict | None = None,
 ):
-    """Helper render satu blok level dengan container kartu fitur modern.
-
-    Catatan: sebelumnya kartu ini dibuat dari sepasang st.markdown('<div>')
-    ... st.markdown('</div>') terpisah -- pola ini TIDAK benar-benar
-    membungkus widget Streamlit asli di antaranya (lihat catatan di CSS),
-    sehingga ringkasan/penyebab/bibliografi/keyword level tampil polos DI
-    LUAR kartu, dan tag <div> pembuka/penutup sendiri muncul sebagai kotak
-    kosong mengambang. Diganti dengan st.container(key=...) yang benar-benar
-    membungkus di DOM.
+    """Helper render satu blok level sebagai expander yang bisa dilipat,
+    supaya banyak level tidak membuat halaman jadi panjang & padat.
+    Level pertama dibuka otomatis; level lainnya terlipat sampai diklik.
     """
-    is_root_cause = depth == max_depth
+    is_root_cause = depth == total_levels
+    root_badge = "🎯 " if is_root_cause else ""
+    expander_label = f"{root_badge}Level {depth}: {', '.join(level_info.get('queries_used', []))}"
 
-    with st.container(key=f"level_card_{depth}"):
+    with st.expander(expander_label, expanded=(depth == 1)):
         if is_root_cause:
             st.markdown('<span class="root-cause-badge">🎯 Root Cause Level</span>', unsafe_allow_html=True)
 
-        st.markdown(f"#### 📍 Level {depth}: {', '.join(level_info.get('queries_used', []))}")
         st.markdown(f"<p style='color: #94a3b8; margin-bottom: 8px;'><b>Artikel Diekstrak:</b> {level_info.get('articles_found', 0)} artikel</p>", unsafe_allow_html=True)
 
         if level_info.get("summary"):
@@ -116,9 +119,28 @@ def _render_level_details(
             )
 
         if level_info.get("causes_extracted"):
-            st.markdown("<b>🔍 Penyebab Teridentifikasi:</b>", unsafe_allow_html=True)
+            st.markdown("<b>🔍 Penyebab Teridentifikasi (dengan Skor Keyakinan):</b>", unsafe_allow_html=True)
+            _tier_colors = {"Tinggi": "#10B981", "Sedang": "#F59E0B", "Rendah": "#EF4444"}
             for c in level_info["causes_extracted"]:
-                st.markdown(f"- 🔴 {c}")
+                if isinstance(c, dict):
+                    detail = c.get("confidence_detail") or {}
+                    composite = detail.get("composite")
+                    tier = detail.get("tier", "Rendah")
+                    color = _tier_colors.get(tier, "#94a3b8")
+                    badge = (
+                        f"<span style='background:{color}22; color:{color}; border:1px solid {color}66; "
+                        f"border-radius:6px; padding:1px 8px; font-size:0.72rem; font-weight:700; margin-left:6px;'>"
+                        f"{composite}% · {tier}</span>"
+                        if composite is not None else ""
+                    )
+                    st.markdown(f"- {c.get('cause', '')} {badge}", unsafe_allow_html=True)
+                    if c.get("rationale"):
+                        st.markdown(
+                            f"<p style='color:#94a3b8; font-size:0.82rem; margin:0 0 6px 16px;'>↳ {c['rationale']}</p>",
+                            unsafe_allow_html=True,
+                        )
+                else:
+                    st.markdown(f"- 🔴 {c}")
 
         if level_info.get("bibliography"):
             with st.expander(f"📚 Daftar Pustaka Level {depth}"):
@@ -134,14 +156,69 @@ def _render_level_details(
             st.info(" | ".join([f"`{kw}`" for kw in level_info["next_keywords"]]))
 
 
+def _render_evidence_graph_section(result_tree: list):
+    """Render peta visual investigasi + penyebab berwarna berdasarkan tier
+    keyakinan, dengan akar masalah ditandai."""
+    st.caption(
+        "Peta bukti interaktif: kotak biru adalah level investigasi, lingkaran berwarna adalah "
+        "penyebab yang teridentifikasi (hijau = keyakinan tinggi, kuning = sedang, merah = rendah). "
+        "Lingkaran bergaris cyan menandai akar masalah paling dalam yang ditemukan."
+    )
+    graph_data = build_evidence_graph_data(result_tree)
+    fig = build_evidence_graph_fig(graph_data)
+    if fig is not None:
+        st.plotly_chart(fig, width="stretch")
+    else:
+        st.info("Belum cukup data untuk membangun evidence graph.")
+
+
+def _render_investigation_results(
+    title: str,
+    exec_summary: str,
+    citation_warning: str | None,
+    result_tree: list,
+    consolidated_bib: list,
+):
+    """Susun hasil investigasi (brief, evidence graph, root cause tree) ke
+    dalam sub-tab terpisah, supaya tidak semua konten menumpuk di satu
+    halaman panjang. Dipakai baik untuk hasil baru maupun riwayat tersimpan.
+    """
+    st.markdown(f"## {title}")
+
+    sub_tab_brief, sub_tab_graph, sub_tab_tree = st.tabs(
+        ["📋 Executive Brief", "🕸️ Evidence Graph", "🌳 Root Cause Tree"]
+    )
+
+    with sub_tab_brief:
+        if exec_summary:
+            st.markdown(exec_summary)
+            if citation_warning:
+                st.warning(citation_warning)
+        else:
+            st.info("Ringkasan eksekutif belum tersedia untuk investigasi ini.")
+
+    with sub_tab_graph:
+        _render_evidence_graph_section(result_tree)
+
+    with sub_tab_tree:
+        total_levels = max((lvl["depth"] for lvl in result_tree), default=1)
+        url_to_global_number = {
+            b.get("url"): b.get("number") for b in consolidated_bib
+        }
+        for level_info in result_tree:
+            _render_level_details(
+                level_info, level_info["depth"], total_levels, url_to_global_number
+            )
+
+
 # --- STRUKTUR TAB UTAMA ---
 tab_recursive, tab_pdf_recursive = st.tabs(
-    ["🚀 Jalankan Analisis 5 Why", "📄 Download PDF Laporan Recursive"]
+    ["🕵️ Jalankan AI Investigator", "📄 Download Executive Intelligence Brief"]
 )
 
 with tab_recursive:
     with st.container(key="fenomena_config_card"):
-        st.subheader("⚙️ Konfigurasi Analisis Fenomena")
+        st.subheader("⚙️ Konfigurasi Investigasi")
         initial_problem_query = st.text_area(
             "Deskripsi Fenomena / Masalah Utama",
             value=st.session_state.get(
@@ -157,7 +234,7 @@ with tab_recursive:
             key="slider_depth_analysis",
         )
         run_analysis = st.button(
-            "🚀 Jalankan Recursive 5 Why Analysis",
+            "🕵️ Jalankan AI Investigator",
             type="primary",
             key="btn_run_recursive",
             width="stretch",
@@ -249,22 +326,13 @@ with tab_recursive:
                     "✅ Analisis Akar Masalah (5 Why) & Penyusunan Laporan Eksekutif Selesai!"
                 )
 
-                st.markdown(f"## {ai_title}")
-                if final_executive_summary:
-                    st.markdown("### 📋 Ringkasan Eksekutif")
-                    st.markdown(final_executive_summary)
-                    if citation_warning:
-                        st.warning(citation_warning)
-                    st.divider()
-
-                st.markdown("### 🌳 Hasil Pohon Akar Masalah (Root Cause Tree)")
-                url_to_global_number = {
-                    b.get("url"): b.get("number") for b in consolidated_bib
-                }
-                for level_info in result_tree:
-                    _render_level_details(
-                        level_info, level_info["depth"], url_to_global_number
-                    )
+                _render_investigation_results(
+                    ai_title,
+                    final_executive_summary,
+                    citation_warning,
+                    result_tree,
+                    consolidated_bib,
+                )
 
         except Exception as e:
             status_container.empty()
@@ -279,10 +347,10 @@ with tab_recursive:
             st.markdown(
                 """
             <div class="feature-card" style="text-align: center; padding: 48px 24px; border: 2px dashed rgba(0, 240, 255, 0.25);">
-                <div style="font-size: 3rem; margin-bottom: 12px;">🔍</div>
-                <h3 style="color: #00f0ff;">Belum Ada Analisis yang Dijalankan</h3>
+                <div style="font-size: 3rem; margin-bottom: 12px;">🕵️</div>
+                <h3 style="color: #00f0ff;">Belum Ada Investigasi yang Dijalankan</h3>
                 <p style="color: #94a3b8; max-width: 600px; margin: 0 auto 20px auto;">
-                    Masukkan deskripsi fenomena di atas dan klik tombol <b>Jalankan Recursive 5 Why Analysis</b>. 
+                    Masukkan deskripsi fenomena di atas dan klik tombol <b>Jalankan AI Investigator</b>. 
                 </p>
             </div>
             """,
@@ -297,33 +365,19 @@ with tab_recursive:
                 "last_executive_summary", ""
             )
 
-            st.markdown(f"## {stored_title_history or stored_query_history}")
-            if stored_exec_summary:
-                st.markdown("### 📋 Ringkasan Eksekutif")
-                st.markdown(stored_exec_summary)
-                stored_citation_warning = st.session_state.get(
-                    "last_citation_warning"
-                )
-                if stored_citation_warning:
-                    st.warning(stored_citation_warning)
-                st.divider()
-
-            st.markdown(
-                "### 🌳 Hasil Pohon Akar Masalah Terakhir (Root Cause Tree)"
-            )
             stored_bib_for_render = st.session_state.get(
                 "last_consolidated_bibliography", []
             )
-            url_to_global_number = {
-                b.get("url"): b.get("number") for b in stored_bib_for_render
-            }
-            for level_info in stored_result_history:
-                _render_level_details(
-                    level_info, level_info["depth"], url_to_global_number
-                )
+            _render_investigation_results(
+                stored_title_history or stored_query_history,
+                stored_exec_summary,
+                st.session_state.get("last_citation_warning"),
+                stored_result_history,
+                stored_bib_for_render,
+            )
 
 with tab_pdf_recursive:
-    st.subheader("📄 Cetak & Download PDF Laporan Recursive 5-Why")
+    st.subheader("📄 Cetak & Download Executive Intelligence Brief (PDF)")
     stored_result = st.session_state.get("last_recursive_result", None)
     stored_query = st.session_state.get(
         "last_recursive_query", "Analisis Fenomena"
@@ -338,19 +392,19 @@ with tab_pdf_recursive:
 
     if not stored_result:
         st.warning(
-            "⚠️ Belum ada hasil analisis rekursif yang tersedia. Silakan jalankan analisis di tab sebelumnya."
+            "⚠️ Belum ada hasil investigasi yang tersedia. Silakan jalankan AI Investigator di tab sebelumnya."
         )
     else:
-        st.info(f"💡 Laporan komprehensif **'{stored_title}'** siap dicetak.")
+        st.info(f"💡 Executive Intelligence Brief **'{stored_title}'** siap dicetak.")
 
         if st.button(
-            "📥 Proses File PDF Recursive",
+            "📥 Proses Executive Intelligence Brief (PDF)",
             type="primary",
             key="btn_gen_pdf_recursive",
             width="stretch",
         ):
             with st.spinner(
-                "Menyiapkan dokumen PDF laporan eksekutif lengkap..."
+                "Menyiapkan dokumen PDF Executive Intelligence Brief..."
             ):
                 try:
                     pdf_bytes = report_service.generate_recursive_pdf(
@@ -362,11 +416,11 @@ with tab_pdf_recursive:
                     )
 
                     if pdf_bytes:
-                        st.success("Dokumen PDF laporan berhasil dibuat!")
+                        st.success("Dokumen PDF Executive Intelligence Brief berhasil dibuat!")
                         st.download_button(
                             label=f"📄 Download PDF: {stored_title[:60]}",
                             data=pdf_bytes,
-                            file_name=f"Laporan_RootCause_5Why_{stored_query.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                            file_name=f"AI_Investigator_Brief_{stored_query.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
                             mime="application/pdf",
                             width="stretch",
                         )
