@@ -39,7 +39,7 @@ with st.sidebar:
     st.markdown("### ⚡ NewsAnalytics AI")
     st.markdown("---")
     st.page_link("streamlit_app.py", label="Home", icon="🏠")
-    st.page_link("pages/1_Scraping.py", label="News Scraper", icon="📥")
+    st.page_link("pages/1_Scraping.py", label="AI Understanding", icon="📥")
     st.page_link("pages/2_Dashboard.py", label="Analytics Dashboard", icon="📊")
     st.page_link("pages/3_Fenomena.py", label="AI Investigator", icon="🕵️")
     st.markdown("---")
