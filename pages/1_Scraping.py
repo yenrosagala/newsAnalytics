@@ -7,17 +7,18 @@ from app.services.scraper_service import scraper_service
 from app.services.database_service import db_service 
 from app.services.ai_service import ai_service
 from app.services.clustering_service import clustering_service
-from app.core.config import Config  
+from app.core.config import Config   
 from app.core.logger import setup_logger
 from app.generate_pdf import generate_pdf_report
 from app.prompts.executive_summary import get_executive_summary_prompt
 from app.core.auth import render_auth_sidebar
 
+# Konfigurasi Halaman (Wajib dipanggil pertama kali)
+st.set_page_config(page_title="AI News Understanding", layout="wide", page_icon="📥")
+
 # Inisialisasi konfigurasi
 config = Config()
-logger = setup_logger("page_scraping")
-
-
+logger = setup_logger("AI Understanding")
 
 # Memuat File CSS Kustom (jika tersedia)
 css_path = "app/assets/style.css"
@@ -31,22 +32,19 @@ with st.sidebar:
     st.markdown("### ⚡ NewsAnalytics AI")
     st.markdown("---")
     st.page_link("streamlit_app.py", label="Home", icon="🏠")
-    st.page_link("pages/1_Scraping.py", label="News Scraper", icon="📥")
+    st.page_link("pages/1_Scraping.py", label="AI Understanding", icon="📥")
     st.page_link("pages/2_Dashboard.py", label="Analytics Dashboard", icon="📊")
     st.page_link("pages/3_Fenomena.py", label="Root Cause Analysis", icon="🔍")
     st.markdown("---")
     st.markdown("### ℹ️ Informasi")
     st.caption("Fitur mengeksplorasi berita dan memberikan insight secara menyeluruh.")
 
-# Konfigurasi Halaman (Wajib dipanggil pertama kali)
-st.set_page_config(page_title="Scraping & Database", layout="wide", page_icon="📥")
-
 # Render autentikasi sidebar
 render_auth_sidebar()
 
 # Header Halaman Utama dengan UI/UX Modern
-st.markdown("# 📥 News Scraper")
-st.caption("Google News Scraping & Executive Summary")
+st.markdown("# 📥 AI Understanding")
+st.caption("Understanding the News")
 st.markdown("Masukkan kata kunci untuk mengambil data berita terbaru dan kelola database executive summary.")
 st.markdown("---")
 
@@ -54,7 +52,7 @@ st.markdown("---")
 is_admin = st.session_state.get("role") == "admin"
 
 # --- BAGIAN UTAMA: FORM PARAMETER SCRAPING BERITA ---
-with st.container(key="scraping_form_card"):
+with st.container():
     st.subheader("⚙️ Parameter Pencarian Berita")
     st.write("Masukkan topik atau kata kunci berita (Pencarian otomatis difilter dari 1 Januari 2026).")
     
@@ -67,21 +65,18 @@ with st.container(key="scraping_form_card"):
         with col_b:
             sentiment_filter = st.selectbox("Filter Sentimen (Opsional Tampilan)", ["Semua", "Positif", "Netral", "Negatif"])
             
-        submit_scraping = st.form_submit_button("🚀 Jalankan Scraping & Generate Summary", width='stretch', type="primary")
+        submit_scraping = st.form_submit_button("🚀 Jalankan Scraping & Generate Summary", use_container_width=True, type="primary")
 
 if submit_scraping:
     if not keyword.strip():
         st.error("Keyword tidak boleh kosong!")
     else:
         st.session_state["current_keyword"] = keyword
-        
         st.write(f"**Proses Scraping Berjalan:** '{keyword}'")
         
-        # Membuat penampung UI untuk Progress Bar dan URL Real-time
         progress_bar = st.progress(0.0)
         status_container = st.empty()
         
-        # Meneruskan status_container dan progress_bar ke service (Region difokuskan murni ke ID)
         saved_count = scraper_service.execute_scraping_workflow(
             keyword=keyword, 
             limit=num_results, 
@@ -92,7 +87,7 @@ if submit_scraping:
         
         if saved_count > 0:
             status_container.success(f"✅ Berhasil mengekstrak dan menyimpan {saved_count} artikel baru!")
-            progress_bar.empty() # Sembunyikan progress bar setelah selesai
+            progress_bar.empty()
             st.session_state["trigger_auto_summary"] = keyword
         else:
             status_container.warning("Tidak ada berita baru yang ditemukan atau gagal memproses data.")
@@ -107,7 +102,8 @@ def process_and_get_pdf(target_keyword):
     if df_all.empty:
         return None, "Data berita kosong."
         
-    filtered_data = df_all[df_all['kata_kunci'].astype(str).str.contains(target_keyword, case=False, na=False)]
+    # Menggunakan regex=False agar aman dari karakter khusus keyword
+    filtered_data = df_all[df_all['kata_kunci'].astype(str).str.contains(target_keyword, case=False, na=False, regex=False)]
     if filtered_data.empty:
         return None, f"Tidak ada data untuk keyword '{target_keyword}'."
         
@@ -139,17 +135,14 @@ def process_and_get_pdf(target_keyword):
         )
         
         try:
-            # Pakai ai_service.generate() (bukan ai_service.client.models langsung)
-            # supaya rotasi API key DAN fallback ke Gwen AI tetap berlaku di sini juga.
             summary_text_result = ai_service.generate(prompt)
-
             db_service.save_executive_summary_to_db(
                 kata_kunci=target_keyword,
                 rentang_waktu=date_range_str,
                 hasil_summary=summary_text_result
             )
         except Exception as ai_err:
-            return None, f"Gagal menghasilkan ringkasan via AI/Gwen: {ai_err}"
+            return None, f"Gagal menghasilkan ringkasan via AI: {ai_err}"
             
     insights_list = []
     if "Sentimen" in filtered_data.columns:
@@ -190,14 +183,14 @@ if active_keyword_to_summarize:
                 data=bytes(pdf_data),
                 file_name=f"Laporan_Executive_Summary_{active_keyword_to_summarize.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
                 mime="application/pdf",
-                width='stretch'
+                use_container_width=True
             )
         else:
             st.error(err_msg)
 
 st.divider()
 
-# --- BAGIAN DAFTAR EXECUTIVE SUMMARY TERAKHIR (DENGAN LAYOUT BARIS RAPI) ---
+# --- BAGIAN DAFTAR EXECUTIVE SUMMARY TERAKHIR ---
 st.subheader("🗄️ Daftar Executive Summary Tersimpan (Database)")
 df_latest = db_service.get_latest_scraped_data(limit=5)
 
@@ -208,39 +201,45 @@ if not df_latest.empty:
         df_kw = df_latest[df_latest['kata_kunci'] == kw]
         total_art = len(df_kw)
         
-        # Menggunakan struktur expander dengan tata letak kolom yang bersih ala UI/UX baru
         with st.expander(f"🔑 Topik / Kata Kunci: {kw} ({total_art} Artikel Terkait)"):
             col_info1, col_info2 = st.columns([3, 1])
             with col_info1:
                 st.markdown(f"**Status Dokumen:** Siap Diunduh")
                 st.markdown(f"**Total Artikel Terkumpul:** {total_art} entri")
+            
             with col_info2:
-                if st.button(f"📥 Unduh PDF", key=f"btn_dl_{kw.replace(' ', '_')}", width='stretch'):
+                # Cache key unik untuk setiap keyword PDF di session state
+                pdf_cache_key = f"pdf_bytes_{kw}"
+                
+                if st.button(f"⚙️ Siapkan PDF", key=f"btn_prep_{kw.replace(' ', '_')}", use_container_width=True):
                     with st.spinner(f"Memproses file PDF untuk '{kw}'..."):
                         pdf_data, err_msg = process_and_get_pdf(kw)
                         if pdf_data:
-                            st.download_button(
-                                label=f"Klik Untuk Unduh File '{kw}'",
-                                data=bytes(pdf_data),
-                                file_name=f"Laporan_Executive_Summary_{kw.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
-                                mime="application/pdf",
-                                key=f"dl_action_{kw.replace(' ', '_')}",
-                                width='stretch'
-                            )
+                            st.session_state[pdf_cache_key] = pdf_data
+                            st.success("PDF siap diunduh di bawah!")
                         else:
                             st.error(err_msg)
+                
+                # Menampilkan download button langsung jika data PDF sudah ada di session state
+                if pdf_cache_key in st.session_state:
+                    st.download_button(
+                        label=f"📥 Unduh File",
+                        data=bytes(st.session_state[pdf_cache_key]),
+                        file_name=f"Laporan_Executive_Summary_{kw.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf",
+                        key=f"dl_action_{kw.replace(' ', '_')}",
+                        use_container_width=True
+                    )
+                    
         st.markdown("<hr style='margin: 5px 0; border-color: rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
 else:
     st.info("Belum ada data berita tersimpan di database.")
 
 st.divider()
 
-# --- BAGIAN STORY CLUSTERING & TIMELINE (Fase 1: Intelligence Layer) ---
+# --- BAGIAN STORY CLUSTERING & TIMELINE ---
 st.subheader("🧩 Pengelompokan Cerita (Story Clustering) & Timeline")
-st.caption(
-    "Artikel yang membahas peristiwa/isu yang sama otomatis dikelompokkan menjadi satu "
-    "'cerita', lalu disusun secara kronologis untuk melihat bagaimana cerita itu berkembang."
-)
+st.caption("Artikel yang membahas peristiwa/isu yang sama otomatis dikelompokkan menjadi satu 'cerita'.")
 
 @st.cache_data(ttl=60)
 def _load_data_for_clustering():
@@ -270,8 +269,6 @@ else:
         similarity_threshold = st.slider(
             "Ambang Kemiripan",
             min_value=0.5, max_value=0.95, value=0.75, step=0.05,
-            help="Makin kecil = pengelompokan makin ketat (artikel harus sangat mirip untuk jadi satu cerita). "
-                 "Makin besar = pengelompokan makin longgar.",
             key="cluster_similarity_threshold",
         )
 
@@ -298,11 +295,11 @@ else:
 
         timeline_fig = clustering_service.build_timeline_fig(clustered_df)
         if timeline_fig is not None:
-            st.plotly_chart(timeline_fig, width='stretch')
+            st.plotly_chart(timeline_fig, use_container_width=True)
         else:
             st.info("Tidak cukup data bertanggal untuk membuat grafik timeline.")
 
-        st.markdown("#### 📖 Detail Cerita (Diurutkan dari Paling Banyak Diberitakan)")
+        st.markdown("#### 📖 Detail Cerita")
         if cluster_summary.empty:
             st.info("Tidak ada cerita untuk ditampilkan.")
         else:
@@ -321,10 +318,7 @@ else:
                 header = f"{badge} {row['cluster_label']} — {jumlah} artikel"
 
                 with st.expander(header):
-                    st.caption(
-                        f"Rentang waktu: {row.get('tanggal_mulai', '-')} s/d {row.get('tanggal_akhir', '-')} "
-                        f"| Media: {media_terlibat}"
-                    )
+                    st.caption(f"Rentang waktu: {row.get('tanggal_mulai', '-')} s/d {row.get('tanggal_akhir', '-')} | Media: {media_terlibat}")
                     total_dalam_cerita = len(articles_in_cluster)
                     for i, (_, art) in enumerate(articles_in_cluster.iterrows(), start=1):
                         tgl = art.get("waktu_tampilan")
