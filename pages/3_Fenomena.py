@@ -37,21 +37,21 @@ with st.sidebar:
     st.markdown("### ⚡ NewsAnalytics AI")
     st.markdown("---")
     st.page_link("streamlit_app.py", label="Home", icon="🏠")
-    st.page_link("pages/1_Scraping.py", label="News Scraper", icon="📥")
+    st.page_link("pages/1_Scraping.py", label="AI Understanding", icon="📥")
     st.page_link("pages/2_Dashboard.py", label="Analytics Dashboard", icon="📊")
-    st.page_link("pages/3_Fenomena.py", label="Root Cause Analysis", icon="🔍")
+    st.page_link("pages/3_Fenomena.py", label="AI Investigator", icon="🔍")
     st.markdown("---")
     st.markdown("### ℹ️ Informasi")
     st.caption(
-        "Fitur Recursive 5 Why mengeksplorasi berita secara berlapis guna mengidentifikasi akar permasalahan di balik suatu fenomena."
+        "Fitur Recursive 5 Why: mengeksplorasi berita secara berlapis guna mengidentifikasi akar permasalahan di balik suatu fenomena."
     )
 
 # Render autentikasi sidebar
 render_auth_sidebar()
 
 # Header Halaman Utama dengan UI/UX Modern
-st.markdown("# 🔍 Root Cause Analysis")
-st.caption("Fenomena & Recursive 5-Why Analysis")
+st.markdown("# 🔍AI Investigator")
+st.caption("Roor Cause Analysis")
 st.markdown(
     "Identifikasi akar masalah secara mendalam berdasarkan temuan berita dan anomali data."
 )
