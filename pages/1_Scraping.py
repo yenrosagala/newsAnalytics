@@ -34,7 +34,7 @@ with st.sidebar:
     st.page_link("streamlit_app.py", label="Home", icon="🏠")
     st.page_link("pages/1_Scraping.py", label="AI Understanding", icon="📥")
     st.page_link("pages/2_Dashboard.py", label="Analytics Dashboard", icon="📊")
-    st.page_link("pages/3_Fenomena.py", label="Root Cause Analysis", icon="🔍")
+    st.page_link("pages/3_Fenomena.py", label="AI Investigator", icon="🔍")
     st.markdown("---")
     st.markdown("### ℹ️ Informasi")
     st.caption("Fitur mengeksplorasi berita dan memberikan insight secara menyeluruh.")
