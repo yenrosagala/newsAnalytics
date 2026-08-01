@@ -1,8 +1,6 @@
 import asyncio
 from datetime import datetime
-import json
 import os
-import re
 
 from app.core.auth import render_auth_sidebar
 from app.core.config import Config
@@ -20,6 +18,12 @@ from app.services.ai_service import ai_service
 from app.services.database_service import db_service
 from app.services.report_service import report_service
 from app.services.evidence_graph import build_evidence_graph_fig
+from app.services.decision_brief import (
+    parse_decision_brief_json,
+    serialize_brief,
+    deserialize_brief,
+)
+from app.components.decision_brief_view import render_decision_brief
 import streamlit as st
 
 config = Config()
@@ -61,35 +65,6 @@ st.markdown(
     "menjadi Executive Intelligence Brief siap-pakai."
 )
 st.markdown("---")
-
-
-def _parse_title_summary_json(raw_text: str, fallback_query: str) -> dict:
-    """Parsing defensif untuk output JSON {title, executive_summary} dari AI."""
-    if not raw_text:
-        return {
-            "title": f"Analisis Akar Masalah: {fallback_query}",
-            "executive_summary": "",
-        }
-
-    text = raw_text.strip()
-    text = re.sub(r"^```(json)?", "", text, flags=re.IGNORECASE).strip()
-    text = re.sub(r"```$", "", text).strip()
-
-    try:
-        data = json.loads(text)
-        title = (data.get("title") or "").strip()
-        summary = (data.get("executive_summary") or "").strip()
-        if not title:
-            title = f"Analisis Akar Masalah: {fallback_query}"
-        return {"title": title, "executive_summary": summary}
-    except Exception as e:
-        logger.warning(
-            f"Gagal parsing JSON judul+ringkasan dari AI, dipakai sebagai teks polos: {e}"
-        )
-        return {
-            "title": f"Analisis Akar Masalah: {fallback_query}",
-            "executive_summary": text,
-        }
 
 
 def _render_level_details(
@@ -174,14 +149,15 @@ def _render_evidence_graph_section(result_tree: list):
 
 def _render_investigation_results(
     title: str,
-    exec_summary: str,
+    brief: dict,
     citation_warning: str | None,
     result_tree: list,
     consolidated_bib: list,
 ):
-    """Susun hasil investigasi (brief, evidence graph, root cause tree) ke
-    dalam sub-tab terpisah, supaya tidak semua konten menumpuk di satu
-    halaman panjang. Dipakai baik untuk hasil baru maupun riwayat tersimpan.
+    """Susun hasil investigasi (Decision Intelligence brief, evidence graph,
+    root cause tree) ke dalam sub-tab terpisah, supaya tidak semua konten
+    menumpuk di satu halaman panjang. Dipakai baik untuk hasil baru maupun
+    riwayat tersimpan.
     """
     st.markdown(f"## {title}")
 
@@ -190,12 +166,9 @@ def _render_investigation_results(
     )
 
     with sub_tab_brief:
-        if exec_summary:
-            st.markdown(exec_summary)
-            if citation_warning:
-                st.warning(citation_warning)
-        else:
-            st.info("Ringkasan eksekutif belum tersedia untuk investigasi ini.")
+        render_decision_brief(brief)
+        if citation_warning:
+            st.warning(citation_warning)
 
     with sub_tab_graph:
         _render_evidence_graph_section(result_tree)
@@ -278,32 +251,31 @@ with tab_recursive:
                 )
 
                 ai_title = f"Analisis Akar Masalah: {initial_problem_query}"
-                final_executive_summary = ""
+                brief = dict()
                 try:
                     raw_response = ai_service.generate(prompt_exec)
-                    parsed = _parse_title_summary_json(
-                        raw_response, initial_problem_query
+                    brief = parse_decision_brief_json(
+                        raw_response,
+                        fallback_title=f"Analisis Akar Masalah: {initial_problem_query}",
                     )
-                    ai_title = parsed["title"]
-                    final_executive_summary = parsed["executive_summary"]
+                    ai_title = brief["title"]
                 except Exception as llm_err:
                     logger.error(
-                        f"Gagal menyusun ringkasan eksekutif: {llm_err}"
+                        f"Gagal menyusun executive brief: {llm_err}"
                     )
                     st.warning(
-                        f"⚠️ Gagal menyusun ringkasan eksekutif via AI ({llm_err})."
+                        f"⚠️ Gagal menyusun executive brief via AI ({llm_err})."
                     )
 
+                citation_check_text = f"{brief.get('situation', '')}\n{brief.get('impact', '')}"
                 citation_warning = validate_citation_diversity(
-                    final_executive_summary, consolidated_bib
+                    citation_check_text, consolidated_bib
                 )
                 st.session_state["last_citation_warning"] = citation_warning
 
                 st.session_state["last_recursive_result"] = result_tree
                 st.session_state["last_recursive_query"] = initial_problem_query
-                st.session_state["last_executive_summary"] = (
-                    final_executive_summary
-                )
+                st.session_state["last_decision_brief"] = brief
                 st.session_state["last_report_title"] = ai_title
                 st.session_state["last_consolidated_bibliography"] = (
                     consolidated_bib
@@ -313,7 +285,7 @@ with tab_recursive:
                     db_service.save_root_cause_analysis(
                         initial_query=initial_problem_query,
                         result_tree=result_tree,
-                        executive_summary=final_executive_summary,
+                        executive_summary=serialize_brief(brief),
                     )
                 except Exception as db_err:
                     logger.warning(
@@ -328,7 +300,7 @@ with tab_recursive:
 
                 _render_investigation_results(
                     ai_title,
-                    final_executive_summary,
+                    brief,
                     citation_warning,
                     result_tree,
                     consolidated_bib,
@@ -361,8 +333,8 @@ with tab_recursive:
                 "last_recursive_query", ""
             )
             stored_title_history = st.session_state.get("last_report_title", "")
-            stored_exec_summary = st.session_state.get(
-                "last_executive_summary", ""
+            stored_brief_history = st.session_state.get(
+                "last_decision_brief", {}
             )
 
             stored_bib_for_render = st.session_state.get(
@@ -370,7 +342,7 @@ with tab_recursive:
             )
             _render_investigation_results(
                 stored_title_history or stored_query_history,
-                stored_exec_summary,
+                stored_brief_history,
                 st.session_state.get("last_citation_warning"),
                 stored_result_history,
                 stored_bib_for_render,
@@ -382,7 +354,7 @@ with tab_pdf_recursive:
     stored_query = st.session_state.get(
         "last_recursive_query", "Analisis Fenomena"
     )
-    stored_exec_summary = st.session_state.get("last_executive_summary", "")
+    stored_brief_pdf = st.session_state.get("last_decision_brief", {})
     stored_title = st.session_state.get(
         "last_report_title", f"Analisis Akar Masalah: {stored_query}"
     )
@@ -409,7 +381,7 @@ with tab_pdf_recursive:
                 try:
                     pdf_bytes = report_service.generate_recursive_pdf(
                         title=stored_title,
-                        executive_summary=stored_exec_summary,
+                        brief=stored_brief_pdf,
                         initial_query=stored_query,
                         result_tree=stored_result,
                         consolidated_bibliography=stored_bibliography,
