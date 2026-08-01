@@ -1,7 +1,5 @@
 import streamlit as st
 
-from app.services.decision_brief import SEVERITY_COLORS
-
 
 def render_decision_brief(brief: dict, show_bibliography: bool = False) -> None:
     """Render satu Decision Intelligence Executive Brief (Situation / Risks /
@@ -11,6 +9,12 @@ def render_decision_brief(brief: dict, show_bibliography: bool = False) -> None:
     tidak memanggil ini karena ringkasan eksekutifnya langsung diunduh
     sebagai PDF tanpa ditampilkan inline di UI.
     """
+    # Import lokal (bukan di top-level modul) supaya file ini tidak pernah
+    # ikut serta dalam rantai circular-import apa pun saat Python meng-import
+    # app.services.decision_brief -- pada saat fungsi ini benar-benar
+    # dipanggil, seluruh modul aplikasi sudah pasti selesai di-import.
+    from app.services.decision_brief import SEVERITY_COLORS
+
     if not brief:
         st.info("Belum ada Executive Brief untuk ditampilkan.")
         return
