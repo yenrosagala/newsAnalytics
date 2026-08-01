@@ -14,10 +14,15 @@ def clean_text(text):
     return text.encode('ascii', 'ignore').decode('ascii')
 
 
-def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t_media_str, summary_text):
+def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t_media_str, brief):
     """
     Fungsi utilitas murni untuk membuat file PDF berdasarkan data yang dikirim dari UI.
     Grafik dibuat menggunakan Matplotlib/Seaborn agar tidak ketergantungan pada Chrome/Kaleido.
+
+    `brief`: dict terstruktur Decision Intelligence Executive Brief, hasil dari
+    `app.services.decision_brief.parse_decision_brief_json` / `deserialize_brief`,
+    dengan keys: title, situation, risks (list of {risk,severity,rationale}),
+    impact, recommendations (list of str), bibliography (str).
     """
     # Set style global untuk grafik biar rapi
     plt.style.use('ggplot')
@@ -59,23 +64,9 @@ def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t
         plt.close()
         img_media_bytes.seek(0)
 
-    # 3. PARSING TEKS SUMMATION UNTUK MEMISAHKAN ESAI DAN REFERENSI
-    parsed_body = summary_text
-    parsed_references = ""
-    
-    if "Isi Analisis" in summary_text:
-        parts = summary_text.split("Isi Analisis")
-        rest = parts[1]
-        if "Daftar Pustaka" in rest:
-            rest_parts = rest.split("Daftar Pustaka")
-            parsed_body = rest_parts[0].strip()
-            parsed_references = rest_parts[1].strip()
-        else:
-            parsed_body = rest.strip()
-    elif "Daftar Pustaka" in summary_text:
-        rest_parts = summary_text.split("Daftar Pustaka")
-        parsed_body = rest_parts[0].strip()
-        parsed_references = rest_parts[1].strip()
+    brief = brief or {}
+    ai_title = (brief.get("title") or "").strip()
+    SEVERITY_RGB = {"Tinggi": (200, 40, 40), "Sedang": (180, 120, 0), "Rendah": (30, 140, 90)}
 
     # 4. INISIALISASI DOKUMEN FPDF
     pdf = FPDF(orientation="P", unit="mm", format="A4")
@@ -90,7 +81,8 @@ def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t
     
       
     # MENAMPILKAN JUDUL UTAMA ANALISIS HASIL AI SECARA DINAMIS
-    clean_keyword_title = target_keyword.replace("Judul Analisis", "").replace("**", "").replace(":", "").strip()
+    display_title = ai_title if ai_title else target_keyword
+    clean_keyword_title = display_title.replace("**", "").replace(":", "").strip()
     clean_keyword_title = clean_keyword_title.replace("•", "-").replace("·", "-")
     clean_keyword_title = clean_text(clean_keyword_title)
     
@@ -159,28 +151,71 @@ def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t
         pdf.multi_cell(170, 6, f"  - {clean_insight}", new_x="LMARGIN", new_y="NEXT", align="JUSTIFY")
     pdf.ln(6)
     
-    # --- SEKSI 3: EXECUTIVE SUMMARY BY AI ---
+    # --- SEKSI 3: EXECUTIVE BRIEF (Situation / Risks / Impact / Recommendations) ---
+    def _write_paragraphs(text, font_size=11):
+        pdf.set_font("Helvetica", "", font_size)
+        pdf.set_text_color(40, 40, 40)
+        clean_body = clean_text(text.replace("**", ""))
+        clean_body = clean_body.replace("•", "-").replace("·", "-")
+        for paragraf in [p.strip() for p in clean_body.split("\n") if p.strip()]:
+            pdf.multi_cell(170, 6.5, "        " + paragraf, new_x="LMARGIN", new_y="NEXT", align="JUSTIFY")
+            pdf.ln(3)
+
+    def _write_subheading(text):
+        pdf.set_font("Helvetica", "B", 11.5)
+        pdf.set_text_color(0, 100, 180)
+        pdf.cell(170, 7, clean_text(text), new_x="LMARGIN", new_y="NEXT")
+        pdf.ln(1)
+
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(0, 100, 180)
-    pdf.cell(170, 8, "3. Analisis Naratif Eksekutif", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(170, 8, "3. Executive Brief", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(2)
-    
-    pdf.set_font("Helvetica", "", 11)
-    pdf.set_text_color(40, 40, 40)
-    
-    clean_body = parsed_body.replace("**", "")
-    clean_body = clean_text(clean_body)
-    clean_body = clean_body.replace("•", "-").replace("·", "-")
-    paragraf_list = [p.strip() for p in clean_body.split("\n") if p.strip()]
-    
-    for paragraf in paragraf_list:
-        # 🟢 REVISI UTAMA: Menggantikan first_line_indent dengan penambahan spasi manual di awal paragraf
-        paragraf_terindentasi = "        " + paragraf
-        pdf.multi_cell(170, 6.5, paragraf_terindentasi, new_x="LMARGIN", new_y="NEXT", align="JUSTIFY")
+
+    if brief.get("situation"):
+        _write_subheading("Situation")
+        _write_paragraphs(brief["situation"])
+
+    if brief.get("risks"):
+        _write_subheading("Risks")
+        pdf.set_font("Helvetica", "", 10.5)
+        for r in brief["risks"]:
+            severity = r.get("severity", "Sedang")
+            rgb = SEVERITY_RGB.get(severity, (80, 80, 80))
+            pdf.set_text_color(40, 40, 40)
+            line = clean_text(f"- {r.get('risk', '')} ")
+            pdf.write(5.6, line)
+            pdf.set_font("Helvetica", "B", 9.5)
+            pdf.set_text_color(*rgb)
+            pdf.write(5.6, f"[{severity}]")
+            pdf.ln(6)
+            pdf.set_font("Helvetica", "", 10.5)
+            if r.get("rationale"):
+                pdf.set_text_color(110, 110, 110)
+                pdf.set_font("Helvetica", "I", 9)
+                pdf.multi_cell(170, 5, clean_text(f"  Dasar: {r['rationale']}"), new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("Helvetica", "", 10.5)
         pdf.ln(3)
-    
+
+    if brief.get("impact"):
+        _write_subheading("Impact")
+        _write_paragraphs(brief["impact"])
+
+    if brief.get("recommendations"):
+        _write_subheading("Recommendations")
+        pdf.set_font("Helvetica", "", 10.5)
+        pdf.set_text_color(40, 40, 40)
+        for i, rec in enumerate(brief["recommendations"], 1):
+            pdf.multi_cell(170, 6, clean_text(f"{i}. {rec}"), new_x="LMARGIN", new_y="NEXT", align="JUSTIFY")
+        pdf.ln(3)
+
+    if not any([brief.get("situation"), brief.get("risks"), brief.get("impact"), brief.get("recommendations")]):
+        pdf.set_font("Helvetica", "I", 10)
+        pdf.set_text_color(120, 120, 120)
+        pdf.multi_cell(170, 6, "Executive brief tidak tersedia untuk laporan ini.", new_x="LMARGIN", new_y="NEXT")
+
     # --- SEKSI 4: DAFTAR PUSTAKA NUMERIK DI HALAMAN AKHIR ---
-    if parsed_references:
+    if brief.get("bibliography"):
         pdf.ln(4)
         pdf.set_font("Helvetica", "B", 12)
         pdf.set_text_color(0, 100, 180)
@@ -190,7 +225,7 @@ def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(50, 50, 50)
         
-        clean_refs = parsed_references.replace("**", "")
+        clean_refs = brief["bibliography"].replace("**", "")
         clean_refs = clean_text(clean_refs)
         clean_refs = clean_refs.replace("•", "-").replace("·", "-")
         ref_lines = [r.strip() for r in clean_refs.split("\n") if r.strip()]
