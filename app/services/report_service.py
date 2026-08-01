@@ -91,7 +91,7 @@ class ReportService:
     @staticmethod
     def generate_recursive_pdf(
         title: str,
-        executive_summary: str,
+        brief: Dict,
         initial_query: str,
         result_tree: List[Dict],
         consolidated_bibliography: List[Dict],
@@ -100,7 +100,8 @@ class ReportService:
 
         Struktur:
           1. Sampul: judul hasil AI (bukan generik) + metadata topik
-          2. Ringkasan Eksekutif (esai formal dari AI, sitasi [n])
+          2. Executive Brief (Situation / Risks / Impact / Recommendations)
+             -- dict terstruktur dari app.services.decision_brief
           3. Analisis Bertingkat: per level -- query, ringkasan, penyebab
           4. Grafik jumlah artikel per level (data asli, bukan data acak)
           5. Daftar Pustaka Konsolidasi -- gabungan SEMUA level, bernomor
@@ -112,6 +113,8 @@ class ReportService:
         pdf.add_page()
 
         S = _sanitize_pdf_text
+        brief = brief or {}
+        SEVERITY_RGB = {"Tinggi": (200, 40, 40), "Sedang": (180, 120, 0), "Rendah": (30, 140, 90)}
 
         # --- SAMPUL ---
         pdf.set_font("Helvetica", "", 9)
@@ -146,18 +149,65 @@ class ReportService:
         pdf.line(20, pdf.get_y(), 190, pdf.get_y())
         pdf.ln(8)
 
-        # --- EXECUTIVE INTELLIGENCE BRIEF ---
+        # --- EXECUTIVE INTELLIGENCE BRIEF (Situation / Risks / Impact / Recommendations) ---
         pdf.set_font("Helvetica", "B", 13)
         pdf.set_text_color(0, 100, 180)
         pdf.cell(170, 8, "Executive Intelligence Brief", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(2)
 
-        pdf.set_font("Helvetica", "", 11)
-        pdf.set_text_color(30, 30, 30)
-        paragraphs = [p.strip() for p in (executive_summary or "").split("\n") if p.strip()]
-        for para in paragraphs:
-            pdf.multi_cell(170, 6.3, S(para), align="J", markdown=True, new_x="LMARGIN", new_y="NEXT")
+        def _brief_subheading(text):
+            pdf.set_font("Helvetica", "B", 11.5)
+            pdf.set_text_color(0, 100, 180)
+            pdf.cell(170, 7, S(text), new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(1)
+
+        def _brief_paragraphs(text):
+            pdf.set_font("Helvetica", "", 11)
+            pdf.set_text_color(30, 30, 30)
+            for para in [p.strip() for p in (text or "").split("\n") if p.strip()]:
+                pdf.multi_cell(170, 6.3, S(para), align="J", markdown=True, new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(3)
+
+        if brief.get("situation"):
+            _brief_subheading("Situation")
+            _brief_paragraphs(brief["situation"])
+
+        if brief.get("risks"):
+            _brief_subheading("Risks")
+            pdf.set_font("Helvetica", "", 10.5)
+            for r in brief["risks"]:
+                severity = r.get("severity", "Sedang")
+                rgb = SEVERITY_RGB.get(severity, (80, 80, 80))
+                pdf.set_text_color(30, 30, 30)
+                pdf.write(5.6, S(f"- {r.get('risk', '')} "))
+                pdf.set_font("Helvetica", "B", 9.5)
+                pdf.set_text_color(*rgb)
+                pdf.write(5.6, f"[{severity}]")
+                pdf.ln(6)
+                pdf.set_font("Helvetica", "", 10.5)
+                if r.get("rationale"):
+                    pdf.set_text_color(110, 110, 110)
+                    pdf.set_font("Helvetica", "I", 9)
+                    pdf.multi_cell(170, 5, S(f"  Dasar: {r['rationale']}"), new_x="LMARGIN", new_y="NEXT")
+                    pdf.set_font("Helvetica", "", 10.5)
             pdf.ln(3)
+
+        if brief.get("impact"):
+            _brief_subheading("Impact")
+            _brief_paragraphs(brief["impact"])
+
+        if brief.get("recommendations"):
+            _brief_subheading("Recommendations")
+            pdf.set_font("Helvetica", "", 10.5)
+            pdf.set_text_color(30, 30, 30)
+            for i, rec in enumerate(brief["recommendations"], 1):
+                pdf.multi_cell(170, 6, S(f"{i}. {rec}"), new_x="LMARGIN", new_y="NEXT", align="JUSTIFY")
+            pdf.ln(3)
+
+        if not any([brief.get("situation"), brief.get("risks"), brief.get("impact"), brief.get("recommendations")]):
+            pdf.set_font("Helvetica", "I", 10)
+            pdf.set_text_color(120, 120, 120)
+            pdf.multi_cell(170, 6, "Executive brief tidak tersedia untuk laporan ini.", new_x="LMARGIN", new_y="NEXT")
 
         pdf.ln(2)
         pdf.set_draw_color(200, 200, 200)
