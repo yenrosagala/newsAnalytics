@@ -1,62 +1,172 @@
-import streamlit as st
+"""
+Decision Intelligence — Executive Brief
+=========================================
+Struktur & parsing bersama untuk "Executive Brief" bergaya Decision
+Intelligence: Situation, Risks, Impact, Recommendations (S-R-I-R).
 
-from app.services.decision_brief import SEVERITY_COLORS
+Dipakai oleh:
+- pages/1_Scraping.py (ringkasan eksekutif per-keyword)
+- pages/3_Fenomena.py / AI Investigator (ringkasan eksekutif hasil investigasi)
+- app/generate_pdf.py & app/services/report_service.py (render ke PDF)
+- app/components/decision_brief_view.py (render ke Streamlit UI)
+
+Kenapa dipusatkan di sini: dua halaman tsb tadinya masing-masing punya
+parser JSON ad-hoc sendiri untuk ringkasan eksekutif (bentuk esai bebas).
+Sekarang keduanya memakai skema OUTPUT yang SAMA (lihat `parse_decision_brief_json`)
+supaya format & styling brief konsisten di seluruh aplikasi.
+"""
+import json
+import re
+from typing import Dict, List, Optional
+
+try:
+    from app.core.logger import get_logger
+    logger = get_logger("DecisionBrief")
+except Exception:  # pragma: no cover
+    import logging
+    logger = logging.getLogger("DecisionBrief")
+
+VALID_SEVERITY_TIERS = ("Tinggi", "Sedang", "Rendah")
+SEVERITY_COLORS = {
+    "Tinggi": "#EF4444",   # merah -- risiko/urgensi tinggi
+    "Sedang": "#F59E0B",   # amber
+    "Rendah": "#10B981",   # hijau -- risiko rendah
+}
+
+EMPTY_BRIEF: Dict = {
+    "title": "",
+    "situation": "",
+    "risks": [],
+    "impact": "",
+    "recommendations": [],
+    "bibliography": "",
+}
 
 
-def render_decision_brief(brief: dict, show_bibliography: bool = False) -> None:
-    """Render satu Decision Intelligence Executive Brief (Situation / Risks /
-    Impact / Recommendations) ke UI Streamlit dengan styling konsisten.
+def _normalize_severity(value) -> str:
+    if not value:
+        return "Sedang"
+    value = str(value).strip().title()
+    return value if value in VALID_SEVERITY_TIERS else "Sedang"
 
-    Dipakai oleh AI Investigator (pages/3_Fenomena.py). Halaman Scraping
-    tidak memanggil ini karena ringkasan eksekutifnya langsung diunduh
-    sebagai PDF tanpa ditampilkan inline di UI.
+
+def _normalize_risks(raw_risks: List) -> List[Dict]:
+    """Menyeragamkan `risks` jadi list of dict {risk, severity, rationale}.
+    Menangani juga input list-of-string (fallback kalau AI abaikan skema)."""
+    normalized = []
+    for item in raw_risks or []:
+        if isinstance(item, dict):
+            risk_text = str(item.get("risk") or item.get("text") or "").strip()
+            if not risk_text:
+                continue
+            normalized.append({
+                "risk": risk_text,
+                "severity": _normalize_severity(item.get("severity")),
+                "rationale": str(item.get("rationale") or "").strip(),
+            })
+        elif isinstance(item, str) and item.strip():
+            normalized.append({"risk": item.strip(), "severity": "Sedang", "rationale": ""})
+    return normalized
+
+
+def _normalize_recommendations(raw_recs: List) -> List[str]:
+    normalized = []
+    for item in raw_recs or []:
+        if isinstance(item, dict):
+            text = str(item.get("recommendation") or item.get("text") or "").strip()
+        else:
+            text = str(item).strip()
+        if text:
+            normalized.append(text)
+    return normalized
+
+
+def parse_decision_brief_json(raw_text: str, fallback_title: str = "") -> Dict:
+    """Parsing defensif untuk output JSON Decision Intelligence Brief dari AI.
+
+    Skema yang diharapkan:
+    {
+      "title": "...",
+      "situation": "... (esai naratif, boleh multi-paragraf, dengan sitasi [n])",
+      "risks": [{"risk": "...", "severity": "Tinggi|Sedang|Rendah", "rationale": "..."}],
+      "impact": "... (esai naratif implikasi/dampak, dengan sitasi [n])",
+      "recommendations": ["...", "..."],
+      "bibliography": "[1] ...\\n[2] ..."   (opsional -- hanya dipakai kalau AI
+                                              yang menyusun daftar pustaka sendiri;
+                                              di AI Investigator ini dikosongkan
+                                              karena bibliografi disusun sistem)
+    }
+
+    Fallback: kalau parsing JSON gagal atau field kosong, seluruh teks mentah
+    dipakai sebagai isi 'situation' supaya tidak ada informasi yang hilang,
+    hanya saja tidak terstruktur.
     """
-    if not brief:
-        st.info("Belum ada Executive Brief untuk ditampilkan.")
-        return
+    if not raw_text:
+        brief = dict(EMPTY_BRIEF)
+        brief["title"] = fallback_title
+        return brief
 
-    has_content = any([
-        brief.get("situation"), brief.get("risks"),
-        brief.get("impact"), brief.get("recommendations"),
+    text = raw_text.strip()
+    text = re.sub(r"^```(json)?", "", text, flags=re.IGNORECASE).strip()
+    text = re.sub(r"```$", "", text).strip()
+
+    try:
+        data = json.loads(text)
+        title = str(data.get("title") or "").strip() or fallback_title
+        return {
+            "title": title,
+            "situation": str(data.get("situation") or "").strip(),
+            "risks": _normalize_risks(data.get("risks") or []),
+            "impact": str(data.get("impact") or "").strip(),
+            "recommendations": _normalize_recommendations(data.get("recommendations") or []),
+            "bibliography": str(data.get("bibliography") or "").strip(),
+        }
+    except Exception as e:
+        logger.warning(f"Gagal parsing JSON decision brief, fallback ke teks polos: {e}")
+        brief = dict(EMPTY_BRIEF)
+        brief["title"] = fallback_title
+        brief["situation"] = text
+        return brief
+
+
+def serialize_brief(brief: Dict) -> str:
+    """Serialisasi brief jadi JSON string untuk disimpan di kolom teks DB
+    (mis. tabel `executive_summaries` / `root_cause_analysis`)."""
+    return json.dumps(brief, ensure_ascii=False)
+
+
+def deserialize_brief(raw: Optional[str], fallback_title: str = "") -> Dict:
+    """Kebalikan dari serialize_brief, dengan fallback untuk data LAMA di DB
+    yang masih berupa esai teks polos (sebelum fitur Decision Intelligence
+    Brief ini ada) -- supaya cache lama tidak error, hanya tampil sebagai
+    'situation' tanpa struktur risks/impact/recommendations."""
+    if not raw:
+        brief = dict(EMPTY_BRIEF)
+        brief["title"] = fallback_title
+        return brief
+
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict) and "situation" in data:
+            brief = dict(EMPTY_BRIEF)
+            brief.update(data)
+            if not brief.get("title"):
+                brief["title"] = fallback_title
+            return brief
+    except Exception:
+        pass
+
+    # Data lama (pra-Decision Intelligence): teks esai polos.
+    brief = dict(EMPTY_BRIEF)
+    brief["title"] = fallback_title
+    brief["situation"] = raw
+    return brief
+
+
+def is_brief_empty(brief: Dict) -> bool:
+    return not any([
+        brief.get("situation"),
+        brief.get("risks"),
+        brief.get("impact"),
+        brief.get("recommendations"),
     ])
-    if not has_content:
-        st.info("Belum ada Executive Brief untuk ditampilkan.")
-        return
-
-    if brief.get("situation"):
-        st.markdown("#### 🎯 Situation")
-        st.markdown(brief["situation"])
-        st.markdown("")
-
-    if brief.get("risks"):
-        st.markdown("#### ⚠️ Risks")
-        for r in brief["risks"]:
-            color = SEVERITY_COLORS.get(r.get("severity", "Sedang"), "#94a3b8")
-            badge = (
-                f"<span style='background:{color}22; color:{color}; border:1px solid {color}66; "
-                f"border-radius:6px; padding:1px 8px; font-size:0.72rem; font-weight:700; margin-left:6px;'>"
-                f"{r.get('severity', 'Sedang')}</span>"
-            )
-            st.markdown(f"- {r.get('risk', '')} {badge}", unsafe_allow_html=True)
-            if r.get("rationale"):
-                st.markdown(
-                    f"<p style='color:#94a3b8; font-size:0.82rem; margin:0 0 6px 16px;'>↳ {r['rationale']}</p>",
-                    unsafe_allow_html=True,
-                )
-        st.markdown("")
-
-    if brief.get("impact"):
-        st.markdown("#### 📉 Impact")
-        st.markdown(brief["impact"])
-        st.markdown("")
-
-    if brief.get("recommendations"):
-        st.markdown("#### ✅ Recommendations")
-        for rec in brief["recommendations"]:
-            st.markdown(f"- {rec}")
-
-    if show_bibliography and brief.get("bibliography"):
-        with st.expander("📚 Daftar Pustaka"):
-            for line in brief["bibliography"].split("\n"):
-                if line.strip():
-                    st.markdown(line.strip())
